@@ -1,0 +1,495 @@
+% =============================================================================
+%  AMIS Addons - author guide
+%  Public documentation for the AMIS addon catalogue.
+%  Build: pdflatex main && pdflatex main
+% =============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{amsmath,amssymb}
+\usepackage{fancyvrb}
+\usepackage[colorlinks=true,linkcolor=teal,urlcolor=teal]{hyperref}
+
+\definecolor{teal}{HTML}{265C74}
+\definecolor{amber}{HTML}{D94F2B}
+\definecolor{codebg}{HTML}{F4F6F7}
+
+\captionsetup{font=small,labelfont={bf,color=teal}}
+\titleformat{\section}{\Large\bfseries\color{teal}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{teal}AMIS Addons --- author guide}
+\fancyhead[R]{\small\color{teal}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\lstdefinestyle{amis}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{teal}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{amber},
+  frame=single,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  showstringspaces=false,
+  columns=fixed,
+  basewidth=0.5em,
+  keepspaces=true,
+}
+\lstset{style=amis}
+
+\newcommand{\file}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\ui}[1]{\textsf{#1}}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{3.5cm}
+  {\Huge\bfseries\color{teal} AMIS Addons\par}
+  \vspace{0.5cm}
+  {\Large Author guide\par}
+  \vspace{0.3cm}
+  {\large How to write, package and publish a segmentation method\par}
+  \vspace{1.5cm}
+  {\large Addon API v1 \quad\textbullet\quad AMIS 0.1.0\par}
+  \vfill
+  {\small Catalogue: \url{https://github.com/ADOBApps/amis-addons}\par}
+  {\small Application: \url{https://github.com/ADOBApps/advancedmedicalis}\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{What an addon is}
+
+An addon is a folder that the AMIS application discovers, imports and runs. It
+owns a segmentation method end to end: its model, its training recipe and its
+window.
+
+\begin{lstlisting}
+my_method/
+    manifest.json     identity and compatibility   (required)
+    __init__.py       behaviour, exposes ADDON     (required)
+    panel.json        the interface, as data       (recommended)
+    model.py          torch model + build_model    (optional)
+    README.md         what it does                 (optional)
+\end{lstlisting}
+
+Three rules explain the rest:
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{The folder is the unit.} Install = copy, remove = delete.
+  \item \textbf{The folder name is the id.} \file{my_method/} declares
+        \code{"id": "my_method"} and is imported as \code{amis_addons.my_method}.
+  \item \textbf{The window is data.} \file{panel.json} is interpreted at run time,
+        so the visual designer and the running application show the same thing.
+\end{enumerate}
+
+\section{Quick start}
+
+\subsection{In the application}
+
+Toolbar \(\to\) \ui{New addon\dots}: choose an id, a display name and a kind
+(\emph{model} or \emph{declarative}). AMIS writes a \emph{runnable} skeleton into
+its workspace, opens the files in the \emph{Code} tab, and the addon already
+works: \ui{Run} prints the model's parameter count.
+
+Press \ui{Validate} (compile + JSON + manifest), then \ui{Test load} (the real
+registry imports it and builds the panel), then \ui{Install}, then
+\ui{Reload addons}.
+
+\subsection{From the terminal}
+
+\begin{lstlisting}[language=bash]
+python -m amis.market validate ../my_method --load   # compile + import + panel
+python -m amis.market package  ../my_method --catalogue-entry
+python -m amis.market verify   my_method-0.1.0.zip
+\end{lstlisting}
+
+\subsection{The smallest complete addon}
+
+\begin{lstlisting}[language=Python]
+# my_method/__init__.py
+from amis.core.addon_api import AddonBase
+
+class MyMethod(AddonBase):
+    def on_run_clicked(self) -> None:
+        self.ui.set("log", "hello from my method")
+
+ADDON = MyMethod
+\end{lstlisting}
+
+\noindent with a \file{panel.json} containing a button named \code{run}, a text
+control named \code{log}, and \code{'api': 1} in the manifest. That is the whole
+contract; everything below is detail.
+
+\section{The manifest}
+
+\begin{lstlisting}[language=Python]
+{
+  "id": "my_method",
+  "name": "My Method",
+  "version": "0.1.0",
+  "api": 1,
+  "author": "Your Name",
+  "license": "GPL-3.0-or-later",
+  "description": "One sentence.",
+  "category": "segmentation",
+  "main": "__init__.py",
+  "capabilities": ["train", "predict", "export"],
+  "order": 500,
+  "tags": ["2d", "unet"],
+  "config": {}
+}
+\end{lstlisting}
+
+\begin{longtable}{@{}p{3.2cm}p{1.5cm}p{9.3cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Req.} & \textbf{Meaning} \\
+\midrule
+\endhead
+\code{id} & yes & identifier; must equal the directory name \\
+\code{name} & yes & label in the method list \\
+\code{api} & yes & must be \code{1} for this release \\
+\code{version} & no & semantic version, e.g. \code{1.2.0} \\
+\code{license} & yes* & required for publication; SPDX identifier preferred \\
+\code{capabilities} & no & any of \code{train}, \code{predict}, \code{export} \\
+\code{order} & no & ascending sort key (bundled: 10, 20, 900) \\
+\code{config} & no & free-form; read as \code{context.manifest.config} \\
+\bottomrule
+\end{longtable}
+
+\noindent *) enforced by the catalogue validator and the AI gate, not by the
+loader, so an unpublished addon still runs without it.
+
+\section{Behaviour: \file{\_\_init\_\_.py}}
+
+\subsection{Lifecycle}
+
+\begin{verbatim}
+initialize()      once, before the panel exists; validate files, load nothing heavy
+build_panel()     first time the method is selected; default: render panel.json
+on_activated()    every time the tab becomes current
+shutdown()        window close or reload; must be idempotent
+\end{verbatim}
+
+\code{AddonBase} implements every hook except \code{build_panel()}, which renders
+\file{panel.json} when present.
+
+\subsection{The context}
+
+\begin{longtable}{@{}p{3.6cm}p{10.8cm}@{}}
+\toprule
+\textbf{Member} & \textbf{Use} \\
+\midrule
+\endhead
+\code{context.data_dir} & writable folder for this addon (weights, exports, caches) \\
+\code{context.addon_dir} & the (read-only) addon folder itself \\
+\code{context.settings} & \code{get}/\code{set}/\code{update}, scoped to your addon \\
+\code{context.logger} & configured logger; also written to the application log \\
+\code{context.qt_parent} & parent for dialogs you open \\
+\code{context.notify(msg, level)} & show a message in the host \\
+\bottomrule
+\end{longtable}
+
+\subsection{Reading and writing the window}
+
+\code{self.ui} is the renderer:
+
+\begin{lstlisting}[language=Python]
+epochs = self.ui.get("epochs")          # int
+self.ui.set("progress", 40)             # int
+preview = self.ui.values["preview"]     # raw widget: ImageView
+preview.set_image(mask)
+\end{lstlisting}
+
+\begin{quote}
+\small Handlers may run before the panel exists (tests, the CLI). Guard with
+\code{if self.ui is not None}. A handler that raises inside a Qt slot can take
+the application down.
+\end{quote}
+
+\subsection{Handlers}
+
+A button calls, in this order: the panel's \code{on_click}, then
+\code{on_<name>_clicked}. An input calls \code{on_change}, then
+\code{on_<name>_changed} and receives the current value.
+
+\begin{lstlisting}[language=Python]
+def on_run_clicked(self) -> None: ...
+def on_threshold_changed(self, value: float) -> None: ...
+\end{lstlisting}
+
+A missing handler is not an error (the control simply does nothing), which is why
+the validator reports it.
+
+\subsection{Threads}
+
+Training and downloads run in a worker thread. Widgets must only be touched from
+the GUI thread, so report through signals:
+
+\begin{lstlisting}[language=Python]
+class _Bridge(QObject):
+    log = Signal(str)
+
+def on_start_clicked(self) -> None:
+    self._bridge = _Bridge()
+    self._bridge.log.connect(lambda m: self.ui.set("log", m))
+    self._trainer = Trainer(..., on_log=self._bridge.log.emit)
+    self._trainer.start()
+\end{lstlisting}
+
+The trainer from \code{amis.ml} already follows this design: it takes plain
+callables and knows nothing about Qt.
+
+\section{The window: \file{panel.json}}
+
+\begin{lstlisting}[language=Python]
+{"amis_panel": 1, "title": "My Method", "width": 600, "height": 700,
+ "root": {"type": "vbox", "children": [
+   {"type": "group", "props": {"title": "Settings"}, "children": [
+     {"type": "dspin", "name": "threshold",
+      "props": {"label": "Threshold", "value": 0.5, "minimum": 0.0,
+                "maximum": 1.0, "step": 0.05, "decimals": 2}}]},
+   {"type": "button", "name": "run", "props": {"label": "Run"},
+    "on_click": "on_run_clicked"},
+   {"type": "image", "name": "preview", "props": {"height": 240}},
+   {"type": "text", "name": "log", "props": {"text": "", "rows": 6}}]}}
+\end{lstlisting}
+
+\begin{longtable}{@{}p{2.6cm}p{3.0cm}p{8.4cm}@{}}
+\toprule
+\textbf{Type} & \textbf{Qt widget} & \textbf{Properties} \\
+\midrule
+\endhead
+\code{vbox}, \code{hbox} & layout & -- (container) \\
+\code{group} & \code{QGroupBox} & \code{title} (container) \\
+\code{scroll} & \code{QScrollArea} & -- (container) \\
+\code{form} & \code{QFormLayout} & -- (container) \\
+\code{tabs} & \code{QTabWidget} & each child needs \code{props.title} \\
+\code{button\_row} & horizontal group & -- (container) \\
+\code{spacer} & filler & \code{height} \\
+\code{separator} & line & \code{orientation} (\code{h}/\code{v}) \\
+\code{label} & \code{QLabel} & \code{text}, \code{bold}, \code{wrap} \\
+\code{text} & \code{QTextEdit} & \code{text}, \code{rows}, \code{readonly}, \code{mono} \\
+\code{image} & image view & \code{height} \\
+\code{progress} & \code{QProgressBar} & \code{minimum}, \code{maximum}, \code{value} \\
+\code{line} & \code{QLineEdit} & \code{text}, \code{placeholder}, \code{label} \\
+\code{spin} & \code{QSpinBox} & \code{label}, \code{value}, \code{minimum}, \code{maximum}, \code{step} \\
+\code{dspin} & \code{QDoubleSpinBox} & the above plus \code{decimals} \\
+\code{slider} & \code{QSlider} & \code{orientation}, range \\
+\code{check} & \code{QCheckBox} & \code{text}, \code{checked} \\
+\code{combo} & \code{QComboBox} & \code{items}, \code{current}, \code{label} \\
+\code{file} & chooser & \code{label}, \code{mode} (\code{open}/\code{save}), \code{filter} \\
+\code{dir} & folder chooser & \code{label}, \code{path} \\
+\code{button} & \code{QPushButton} & \code{label}, \code{enabled} \\
+\bottomrule
+\end{longtable}
+
+Rules: containers carry \code{children}, leaves never do; names are unique;
+numbers always display a decimal point; there is no styling property, because
+the panel follows the desktop theme.
+
+\section{The model: \file{model.py}}
+
+\begin{lstlisting}[language=Python]
+import torch, torch.nn as nn
+DEFAULT_CONFIG = {"in_channels": 1, "out_channels": 1, "base_channels": 8}
+
+class MyNet(nn.Module):
+    def __init__(self, in_channels=1, out_channels=1, base_channels=8):
+        super().__init__()
+        self.body = nn.Sequential(
+            nn.Conv2d(in_channels, base_channels, 3, padding=1), nn.ReLU(True),
+            nn.Conv2d(base_channels, out_channels, 1))
+    def forward(self, x):
+        return self.body(x)
+
+def build_model(config=None):
+    merged = dict(DEFAULT_CONFIG); merged.update(config or {})
+    return MyNet(**merged)
+\end{lstlisting}
+
+Contract: \code{build_model(config) -> nn.Module}; output \emph{logits} shaped
+\((N, C, H, W)\) with the input's spatial size; one channel for binary
+segmentation. Inputs arrive padded to a multiple of 16 and are cropped back, but
+a model that can handle odd sizes itself is more robust.
+
+\section{Shared plumbing}
+
+\begin{lstlisting}[language=Python]
+from amis.ml import data as data_io          # discover_cases, load_gray, load_mask, save_mask
+from amis.ml import metrics as metric_lib    # dice, iou, precision, sensitivity, all_metrics
+from amis.ml.losses import bce_dice_loss
+from amis.ml.trainer import Trainer, TrainingConfig
+from amis.ml.backend import make_segmenter
+from amis.ml.onnx_export import export_onnx
+\end{lstlisting}
+
+\begin{longtable}{@{}p{4.6cm}p{9.8cm}@{}}
+\toprule
+\textbf{Helper} & \textbf{What it does} \\
+\midrule
+\endhead
+\code{data_io.discover_cases(images, masks)} & pairs images and masks by file stem \\
+\code{data_io.load_gray(path)} & float32 \((H,W)\) in \([0,1]\) \\
+\code{Trainer(...).start()} & threaded training; writes \code{best.pt}, \code{last.pt}, \code{history.json} \\
+\code{make_segmenter(...)} & torch or ONNX predictor with padding and cropping \\
+\code{metric_lib.all_metrics(p, y)} & Dice, IoU, precision, sensitivity, specificity, accuracy \\
+\code{export_onnx(...)} & ONNX export plus an ONNX Runtime parity check \\
+\bottomrule
+\end{longtable}
+
+Metric definitions, with \(TP,FP,FN,TN\) pixel counts and \(\varepsilon=10^{-7}\):
+
+\begin{equation*}
+\mathrm{Dice} = \frac{2TP+\varepsilon}{2TP+FP+FN+\varepsilon}, \quad
+\mathrm{IoU} = \frac{TP+\varepsilon}{TP+FP+FN+\varepsilon}, \quad
+\mathrm{Precision} = \frac{TP+\varepsilon}{TP+FP+\varepsilon}.
+\end{equation*}
+
+\section{Worked example}
+
+\code{attention_unet} (published in this catalogue) is a complete method in four
+files, about 380 lines total:
+
+\begin{longtable}{@{}p{3.2cm}p{11.2cm}@{}}
+\toprule
+\textbf{File} & \textbf{Content} \\
+\midrule
+\endhead
+\file{manifest.json} & api 1, \code{train}/\code{predict}/\code{export}, GPL-3 \\
+\file{panel.json} & 41 nodes: data, model, training, prediction, export, log --- no Qt code \\
+\file{model.py} & U-Net with max-pooling and additive attention gates \\
+\file{\_\_init\_\_.py} & handlers, a \code{QObject} bridge, trainer and exporter wiring \\
+\bottomrule
+\end{longtable}
+
+It is also the ablation baseline for the WRANet comparison, which makes it the
+right starting point: copy it, rename the folder and manifest id, and replace
+\file{model.py}.
+
+\section{Packaging and publishing}
+
+\subsection{Build the archive}
+
+\begin{lstlisting}[language=bash]
+python -m amis.market package ../my_method --catalogue-entry \
+    --changelog "What changed in this release"
+\end{lstlisting}
+
+It writes \file{my\_method-0.1.0.zip} (single top-level folder, \code{\_\_pycache\_\_}
+excluded), prints the SHA-256 and size, and emits the exact \file{index.json}
+entry with the real digest.
+
+\subsection{Check it the way the installer will}
+
+\begin{lstlisting}[language=bash]
+python -m amis.market verify my_method-0.1.0.zip --id my_method --version 0.1.0
+python -m amis.market validate ../my_method --load
+\end{lstlisting}
+
+\code{verify} checks the digest, the archive (no absolute paths, no \code{..}, no
+symlinks) and the manifest inside. \code{validate} compiles every file, parses
+every JSON, and with \code{--load} imports the addon and builds its panel.
+
+\subsection{Publish}
+
+Publishing is a pull request against the catalogue repository:
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=2pt]
+  \item upload the ZIP as a release asset (tag
+        \code{<id>-v<version>});
+  \item append the version to \code{addons[].versions} in \file{index.json};
+  \item run \code{python .github/validate\_catalog.py};
+  \item open the PR. CI validates, the maintainer merges.
+\end{enumerate}
+
+There is no upload button in the application on purpose: every package that
+users can install should be reviewed first.
+
+\section{Installing a published addon}
+
+\begin{longtable}{@{}p{4.2cm}p{10.2cm}@{}}
+\toprule
+\textbf{Channel} & \textbf{How} \\
+\midrule
+\endhead
+Application & \ui{Addon marketplace} \(\to\) \ui{Refresh} \(\to\) select \(\to\) \ui{Install} \\
+Terminal & \code{python -m amis.market install <id>} \\
+Folder & copy the folder (or a ZIP you trust) into the addons directory \\
+\bottomrule
+\end{longtable}
+
+Every channel ends the same way: the addon folder appears in the user addons
+directory and the registry reloads it.
+
+\section{Security and licensing}
+
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item Addons are \textbf{Python code executed in-process}. Installation is a
+        trust decision; the marketplace shows version, size and checksum before
+        anything is downloaded and refuses a digest mismatch.
+  \item Never publish clinical images, patient-derived figures, tokens or
+        credentials. Weights trained on restricted data need written permission
+        before they appear in a public catalogue.
+  \item State your licence. AMIS is GPL-3.0-or-later; an addon installed by the
+        user may carry another licence, but anything shipped inside the
+        application bundle must be GPL-3 compatible.
+  \item Versions are immutable: publish a new version rather than replacing a
+        released archive. Mark a bad release \code{"yanked": true} with an
+        explanation instead of deleting it.
+\end{itemize}
+
+\section{Troubleshooting}
+
+\begin{longtable}{@{}p{4.6cm}p{9.8cm}@{}}
+\toprule
+\textbf{Symptom} & \textbf{Cause and fix} \\
+\midrule
+\endhead
+Entry shows \textbf{!} with a traceback & import error; read the last line of the
+traceback, fix, \ui{Reload addons} \\
+\emph{targets API v2} & manifest \code{api} is wrong for this release; set 1 \\
+Buttons do nothing & handler name mismatch; use \code{on_<name>_clicked} or set
+\code{on_click} \\
+\emph{Panel build failed} & the interface raised; validate first, check for an
+unknown widget type \\
+Widget is grey / missing & a container without \code{children}, or a duplicate
+\code{name} \\
+Metrics unavailable & no ground truth: the mask must share the image's file stem,
+next to it or in \code{masks/} \\
+\emph{checksum mismatch} on install & the archive changed after publication;
+re-upload as a new version \\
+\bottomrule
+\end{longtable}
+
+\section{Checklist}
+
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item[\(\square\)] folder name equals \code{manifest.id}, \code{api} is 1
+  \item[\(\square\)] \code{ADDON} exported; every handler in the panel exists
+  \item[\(\square\)] every \code{self.ui.get/set} name exists in the panel
+  \item[\(\square\)] widget types are from the table above
+  \item[\(\square\)] \code{validate --load} passes; \code{verify} passes
+  \item[\(\square\)] licence declared; no data, no secrets
+  \item[\(\square\)] numbers formatted with a decimal point
+\end{itemize}
+
+\end{document}
