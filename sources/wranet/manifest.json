@@ -1,0 +1,28 @@
+{
+  "id": "wranet",
+  "name": "WRANet",
+  "version": "1.0.0",
+  "api": 1,
+  "author": "AMIS core team",
+  "description": "Wavelet residual attention U-Net (Zhao et al., 2023): DWT downsampling, attention-gated skips, BCE+Dice training.",
+  "category": "segmentation",
+  "main": "__init__.py",
+  "capabilities": [
+    "train",
+    "predict",
+    "export"
+  ],
+  "order": 10,
+  "tags": [
+    "unet",
+    "wavelet",
+    "attention",
+    "2d"
+  ],
+  "config": {
+    "reference": "10.1007/s40747-023-01119-y",
+    "paper_parameters_m": 34.6,
+    "paper_flops_b": 1.1
+  },
+  "license": "GPL-3.0-or-later"
+}

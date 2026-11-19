@@ -5,6 +5,35 @@
   "updated": "2026-11-19T00:00:00Z",
   "addons": [
     {
+      "id": "wranet",
+      "name": "WRANet",
+      "description": "Wavelet residual attention U-Net (Zhao et al., 2023): fixed DWT downsampling keeps only the low-frequency sub-band, residual attention gates the skips. The reference method of the AMIS project.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "segmentation",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": [
+        "unet",
+        "wavelet",
+        "attention",
+        "2d",
+        "learned"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/wranet-v1.0.0/wranet-1.0.0.zip",
+          "sha256": "7b765460c1fc24bab71a9d25e5a322b61ed0afe48ecf4973cc75787d4be852ba",
+          "size": 9684,
+          "changelog": "First standalone release; 32.47 M parameters at the defaults.",
+          "published": "2026-11-19T00:00:00Z",
+          "yanked": false
+        }
+      ]
+    },
+    {
       "id": "attention_unet",
       "name": "Attention U-Net",
       "description": "Oktay et al. (2018) attention-gated U-Net. The conventional baseline for the WRANet comparison: max-pooling instead of wavelet downsampling and no residual add in the gate.",
