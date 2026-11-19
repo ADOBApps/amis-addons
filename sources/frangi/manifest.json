@@ -1,0 +1,20 @@
+{
+  "id": "frangi",
+  "name": "Frangi vesselness",
+  "version": "1.0.0",
+  "api": 1,
+  "author": "AMIS core team",
+  "license": "GPL-3.0-or-later",
+  "description": "Frangi et al. (1998) multiscale Hessian vesselness: enhances tubular structures such as vessels and aneurysms, with a polarity switch for dark or bright structures.",
+  "category": "segmentation",
+  "main": "__init__.py",
+  "capabilities": [
+    "predict"
+  ],
+  "order": 200,
+  "tags": [
+    "2d",
+    "classical",
+    "classical"
+  ]
+}

@@ -1,0 +1,181 @@
+{
+  "amis_panel": 1,
+  "title": "Frangi vesselness",
+  "width": 580,
+  "height": 680,
+  "metadata": {
+    "note": "Classical method: runs on one image, no training."
+  },
+  "root": {
+    "type": "vbox",
+    "children": [
+      {
+        "type": "scroll",
+        "children": [
+          {
+            "type": "label",
+            "name": "intro",
+            "props": {
+              "text": "PLACEHOLDER",
+              "wrap": true
+            }
+          },
+          {
+            "type": "group",
+            "props": {
+              "title": "Input"
+            },
+            "children": [
+              {
+                "type": "file",
+                "name": "image_path",
+                "props": {
+                  "label": "Image",
+                  "mode": "open",
+                  "filter": "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)"
+                }
+              }
+            ]
+          },
+          {
+            "type": "group",
+            "props": {
+              "title": "Parameters"
+            },
+            "children": [
+              {
+                "type": "dspin",
+                "name": "sigma_min",
+                "props": {
+                  "label": "Smallest sigma",
+                  "value": 1.0,
+                  "minimum": 0.5,
+                  "maximum": 8.0,
+                  "step": 0.5,
+                  "decimals": 2
+                }
+              },
+              {
+                "type": "dspin",
+                "name": "sigma_max",
+                "props": {
+                  "label": "Largest sigma",
+                  "value": 3.0,
+                  "minimum": 0.5,
+                  "maximum": 12.0,
+                  "step": 0.5,
+                  "decimals": 2
+                }
+              },
+              {
+                "type": "spin",
+                "name": "scales",
+                "props": {
+                  "label": "Scales",
+                  "value": 4,
+                  "minimum": 1,
+                  "maximum": 8,
+                  "step": 1
+                }
+              },
+              {
+                "type": "dspin",
+                "name": "beta",
+                "props": {
+                  "label": "beta",
+                  "value": 0.5,
+                  "minimum": 0.1,
+                  "maximum": 1.0,
+                  "step": 0.05,
+                  "decimals": 2
+                }
+              },
+              {
+                "type": "combo",
+                "name": "polarity",
+                "props": {
+                  "label": "Polarity",
+                  "items": [
+                    "bright",
+                    "dark"
+                  ],
+                  "current": 0
+                }
+              },
+              {
+                "type": "dspin",
+                "name": "threshold",
+                "props": {
+                  "label": "Threshold",
+                  "value": 0.5,
+                  "minimum": 0.0,
+                  "maximum": 1.0,
+                  "step": 0.05,
+                  "decimals": 2
+                }
+              }
+            ]
+          },
+          {
+            "type": "hbox",
+            "children": [
+              {
+                "type": "button",
+                "name": "run",
+                "props": {
+                  "label": "Segment"
+                },
+                "on_click": "on_run_clicked"
+              },
+              {
+                "type": "button",
+                "name": "save_mask",
+                "props": {
+                  "label": "Save mask..."
+                },
+                "on_click": "on_save_mask_clicked"
+              },
+              {
+                "type": "spacer",
+                "props": {
+                  "height": 1
+                }
+              }
+            ]
+          },
+          {
+            "type": "image",
+            "name": "preview",
+            "props": {
+              "height": 260
+            }
+          },
+          {
+            "type": "label",
+            "name": "metrics",
+            "props": {
+              "text": "",
+              "wrap": true
+            }
+          },
+          {
+            "type": "group",
+            "props": {
+              "title": "Log"
+            },
+            "children": [
+              {
+                "type": "text",
+                "name": "log",
+                "props": {
+                  "text": "",
+                  "rows": 6
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

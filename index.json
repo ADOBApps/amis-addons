@@ -12,7 +12,12 @@
       "license": "GPL-3.0-or-later",
       "category": "segmentation",
       "homepage": "https://github.com/ADOBApps/advancedmedicalis",
-      "tags": ["unet", "attention", "baseline", "2d"],
+      "tags": [
+        "unet",
+        "attention",
+        "baseline",
+        "2d"
+      ],
       "versions": [
         {
           "version": "1.0.0",
@@ -22,6 +27,147 @@
           "sha256": "02f90fb6873b7c4dcfeea7e3358acd250e30b8f8f9736ae52d6e698ed602d583",
           "size": 7545,
           "changelog": "First release: full training/prediction/export panel, declarative GUI, 0.09 M parameters at base=8 depth=3.",
+          "published": "2026-11-19T00:00:00Z",
+          "yanked": false
+        }
+      ]
+    },
+    {
+      "id": "unet",
+      "name": "U-Net",
+      "description": "Ronneberger et al. (2015) U-Net: symmetric encoder-decoder with concatenated skip connections. The reference architecture the other methods are compared against.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "segmentation",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": [
+        "unet",
+        "baseline",
+        "2d",
+        "learned"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/unet-v1.0.0/unet-1.0.0.zip",
+          "sha256": "be8ebb7543abbbc2c3ce61ae6e57f877a76f21bdae372772c1087b4069b9ae15",
+          "size": 6814,
+          "changelog": "First release. 22.45 M parameters.",
+          "published": "2026-11-19T00:00:00Z",
+          "yanked": false
+        }
+      ]
+    },
+    {
+      "id": "unetpp",
+      "name": "UNet++",
+      "description": "Zhou et al. (2018) UNet++: nested, densely connected decoder pathways that narrow the semantic gap between encoder and decoder features.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "segmentation",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": [
+        "unet",
+        "nested",
+        "dense",
+        "2d",
+        "learned"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/unetpp-v1.0.0/unetpp-1.0.0.zip",
+          "sha256": "d810310fb1197cfd2a19f121bab3b37c22c8253f80461892624c62dd15b030ff",
+          "size": 6766,
+          "changelog": "First release. 2.29 M parameters.",
+          "published": "2026-11-19T00:00:00Z",
+          "yanked": false
+        }
+      ]
+    },
+    {
+      "id": "resunet",
+      "name": "ResUNet",
+      "description": "Residual U-Net: residual convolution blocks with identity shortcuts in both encoder and decoder, strided-convolution downsampling, transposed-convolution upsampling.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "segmentation",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": [
+        "unet",
+        "residual",
+        "2d",
+        "learned"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/resunet-v1.0.0/resunet-1.0.0.zip",
+          "sha256": "f41b57736d23eaf342539031ea063b5c2e2e7e4b58eb5363be6a35726203b84d",
+          "size": 6799,
+          "changelog": "First release. 2.03 M parameters.",
+          "published": "2026-11-19T00:00:00Z",
+          "yanked": false
+        }
+      ]
+    },
+    {
+      "id": "flatfield",
+      "name": "Flat-field threshold",
+      "description": "Illumination-robust threshold: estimates the background with a large box mean, divides it out, and keeps pixels a few percent brighter than that local level. No training required.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "segmentation",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": [
+        "classical",
+        "illumination",
+        "threshold",
+        "2d"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/flatfield-v1.0.0/flatfield-1.0.0.zip",
+          "sha256": "aef439d4b91973343b55420f701340f85664de2177dd269d6dd255435dbf6507",
+          "size": 4746,
+          "changelog": "First release. no parameters.",
+          "published": "2026-11-19T00:00:00Z",
+          "yanked": false
+        }
+      ]
+    },
+    {
+      "id": "frangi",
+      "name": "Frangi vesselness",
+      "description": "Frangi et al. (1998) multiscale Hessian vesselness: enhances tubular structures such as vessels and aneurysm necks, with a polarity switch for dark or bright structures.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "segmentation",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": [
+        "classical",
+        "vesselness",
+        "hessian",
+        "2d"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/frangi-v1.0.0/frangi-1.0.0.zip",
+          "sha256": "9fada12e774db86db674da729fb0ca83153305487ee772de0ff77fb9c92c5082",
+          "size": 4790,
+          "changelog": "First release. no parameters.",
           "published": "2026-11-19T00:00:00Z",
           "yanked": false
         }

@@ -1,0 +1,21 @@
+{
+  "id": "unetpp",
+  "name": "UNet++",
+  "version": "1.0.0",
+  "api": 1,
+  "author": "AMIS core team",
+  "license": "GPL-3.0-or-later",
+  "description": "Zhou et al. (2018) UNet++: nested, densely connected decoder pathways that narrow the semantic gap between encoder and decoder features.",
+  "category": "segmentation",
+  "main": "__init__.py",
+  "capabilities": [
+    "train",
+    "predict",
+    "export"
+  ],
+  "order": 200,
+  "tags": [
+    "2d",
+    "learned"
+  ]
+}

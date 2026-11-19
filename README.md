@@ -6,6 +6,7 @@ Public catalogue for the **AMIS addon marketplace**. The app reads
 
 ```
 index.json                       the catalogue (schema v1)
+sources/<id>/                    source of every published package
 .github/validate_catalog.py      validator, run on every PR
 .github/workflows/validate.yml   CI wiring
 README.md                        this file
@@ -23,9 +24,21 @@ No account, token or subscription is needed to browse or install.
 
 ## What is in the catalogue
 
-| id | name | licence | what it is |
-|---|---|---|---|
-| `attention_unet` | Attention U-Net | GPL-3.0-or-later | Oktay et al. (2018) attention-gated U-Net; the ablation baseline for WRANet |
+| id | name | licence | what it is | params |
+|---|---|---|---|---|
+| `attention_unet` | Attention U-Net | GPL-3.0-or-later | Oktay et al. (2018) attention-gated U-Net; ablation baseline for WRANet | 0.09 M |
+| `unet` | U-Net | GPL-3.0-or-later | Ronneberger et al. (2015) reference architecture | 22.45 M |
+| `unetpp` | UNet++ | GPL-3.0-or-later | Zhou et al. (2018) nested dense decoder | 2.29 M |
+| `resunet` | ResUNet | GPL-3.0-or-later | residual blocks in encoder and decoder | 2.03 M |
+| `flatfield` | Flat-field threshold | GPL-3.0-or-later | illumination-corrected relative threshold (no training) | -- |
+| `frangi` | Frangi vesselness | GPL-3.0-or-later | multiscale Hessian vesselness for vessels/aneurysms | -- |
+
+The three learned networks share one panel (data, model, training, prediction,
+ONNX export) and the same training loop, so their numbers are directly
+comparable; the two classical methods need no training and give a reference on
+the same data. Sources for every package live in `sources/<id>/`, which keeps
+the GPL corresponding-source requirement satisfied without shipping ZIPs in
+Git history.
 
 ## Rules
 

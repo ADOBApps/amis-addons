@@ -1,0 +1,20 @@
+{
+  "id": "flatfield",
+  "name": "Flat-field threshold",
+  "version": "1.0.0",
+  "api": 1,
+  "author": "AMIS core team",
+  "license": "GPL-3.0-or-later",
+  "description": "Illumination-robust threshold: estimates the background with a large box mean, divides it out, and keeps pixels a few percent brighter than that local level. Survives the gradient that defeats a global threshold, without the background leakage of Sauvola-style local methods.",
+  "category": "segmentation",
+  "main": "__init__.py",
+  "capabilities": [
+    "predict"
+  ],
+  "order": 200,
+  "tags": [
+    "2d",
+    "classical",
+    "classical"
+  ]
+}
