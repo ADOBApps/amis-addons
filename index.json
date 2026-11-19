@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "name": "AMIS addons",
+  "description": "Segmentation methods for the AMIS addon marketplace. Packages are release assets; this file is the catalogue.",
+  "updated": "2026-11-19T00:00:00Z",
+  "addons": [
+    {
+      "id": "attention_unet",
+      "name": "Attention U-Net",
+      "description": "Oktay et al. (2018) attention-gated U-Net. The conventional baseline for the WRANet comparison: max-pooling instead of wavelet downsampling and no residual add in the gate.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "segmentation",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": ["unet", "attention", "baseline", "2d"],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/attention_unet-v1.0.0/attention_unet-1.0.0.zip",
+          "sha256": "02f90fb6873b7c4dcfeea7e3358acd250e30b8f8f9736ae52d6e698ed602d583",
+          "size": 7545,
+          "changelog": "First release: full training/prediction/export panel, declarative GUI, 0.09 M parameters at base=8 depth=3.",
+          "published": "2026-11-19T00:00:00Z",
+          "yanked": false
+        }
+      ]
+    }
+  ]
+}
