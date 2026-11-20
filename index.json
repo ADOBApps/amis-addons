@@ -5,6 +5,33 @@
   "updated": "2026-11-20T00:00:00Z",
   "addons": [
     {
+      "id": "threshold",
+      "name": "Otsu threshold",
+      "description": "Classical Otsu baseline: one global intensity cut, optional invert, metrics against a reference mask. The control every learned method is compared to. Left the application core in 0.1.5.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "baseline",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": [
+        "classical",
+        "threshold",
+        "baseline"
+      ],
+      "versions": [
+        {
+          "version": "1.1.0",
+          "api": 1,
+          "min_amis": "0.1.5",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/threshold-v1.1.0/threshold-1.1.0.zip",
+          "sha256": "75bbf604904509ac5191c60769260bcddb9c81c892f8c68ffd9089908dfaae40",
+          "size": 6230,
+          "changelog": "First catalogue release. Moved out of the core, so the application ships no method. Fixes: double cursor restore, multi-class references collapsed to foreground (and stated in the metrics line), reference-mask lookup no longer matches a bare <stem>.png, warning when the mask covers the whole frame.",
+          "published": "2026-11-20T00:00:00Z",
+          "yanked": false
+        }
+      ]
+    },
+    {
       "id": "refwranet",
       "name": "refWRANet",
       "description": "Multilayer retinal segmentation with a wavelet residual attention U-Net, plus a step-by-step 2-D DWT explorer (LL/LH/HL/HH, Haar, Daubechies, Symlets, biorthogonal). Bundled demo model: mean class Dice 0.636 on OCTAVE layers.",
@@ -22,6 +49,17 @@
         "2d"
       ],
       "versions": [
+        {
+          "version": "1.1.0",
+          "api": 1,
+          "min_amis": "0.1.5",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/refwranet-v1.1.0/refwranet-1.1.0.zip",
+          "sha256": "ea0ef6f50259b25e17b09bbbbb04c0843585a1f0e0e7138454c4957af4feb2aa",
+          "size": 7553971,
+          "changelog": "Small-screen layouts: both tabs scroll (the panel used to require 1394 px of height), image views shrink to 96-170 px and grow to fill. Requires the scroll_pages capability.",
+          "published": "2026-11-20T00:00:00Z",
+          "yanked": false
+        },
         {
           "version": "1.0.0",
           "api": 1,
@@ -52,6 +90,17 @@
       ],
       "versions": [
         {
+          "version": "1.1.2",
+          "api": 1,
+          "min_amis": "0.1.5",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/wranet-v1.1.2/wranet-1.1.2.zip",
+          "sha256": "509c417ec7f19c61ad82fcdaeaf2661fbbfeed8fdbbf660ce9fd724349a2b4e7",
+          "size": 7557571,
+          "changelog": "Small-screen layouts: the five tabs are scroll pages, the preview can shrink. Model, recipe and bundled ONNX unchanged.",
+          "published": "2026-11-20T00:00:00Z",
+          "yanked": false
+        },
+        {
           "version": "1.0.0",
           "api": 1,
           "min_amis": "0.1.0",
@@ -69,9 +118,9 @@
           "url": "https://github.com/ADOBApps/amis-addons/releases/download/wranet-v1.0.1/wranet-1.0.1.zip",
           "sha256": "39256c20f03ee3e8b1288b7faf05e5bafb01cc96429012e6ca735e275c5bb2c6",
           "size": 10252,
-          "changelog": "Predict at the training size (resize in, upsample the probability back), and metrics resolve the ground truth from the Masks folder. Weights from 1.0.0 load unchanged.",
+          "changelog": "Withdrawn: the release asset was never published, so the download is a 404. Use 1.0.2 instead.",
           "published": "2026-11-20T00:00:00Z",
-          "yanked": false
+          "yanked": true
         },
         {
           "version": "1.0.2",

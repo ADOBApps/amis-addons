@@ -1,0 +1,25 @@
+{
+  "id": "threshold",
+  "name": "Otsu threshold",
+  "version": "1.1.0",
+  "api": 1,
+  "author": "AMIS core team",
+  "license": "GPL-3.0-or-later",
+  "description": "Classical Otsu baseline used as the control for every learned method: one global intensity cut, optional invert, metrics against a reference mask.",
+  "category": "baseline",
+  "main": "__init__.py",
+  "capabilities": [
+    "predict"
+  ],
+  "order": 900,
+  "tags": [
+    "classical",
+    "threshold",
+    "baseline"
+  ],
+  "config": {
+    "panel": "panel.json",
+    "reference": "Otsu, N. (1979), IEEE Trans. Systems, Man, and Cybernetics 9(1):62-66",
+    "multiclass_aware": true
+  }
+}

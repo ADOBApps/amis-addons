@@ -1,26 +1,73 @@
 {
   "id": "refwranet",
   "name": "refWRANet",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "api": 1,
   "author": "AMIS core team",
   "license": "GPL-3.0-or-later",
-  "description": "Multilayer retinal segmentation with a wavelet residual attention U-Net, plus a step-by-step 2-D DWT explorer (LL/LH/HL/HH, Haar, Daubechies, Symlets, biorthogonal).",
+  "description": "Multilayer retinal segmentation with a wavelet residual attention U-Net, plus a step-by-step 2-D DWT explorer (LL/LH/HL/HH, Haar, Daubechies, Symlets, biorthogonal). Scrolls on small screens.",
   "category": "segmentation",
   "main": "__init__.py",
-  "capabilities": ["train", "predict", "export"],
-  "requires_capabilities": ["multiclass", "onnx"],
+  "capabilities": [
+    "train",
+    "predict",
+    "export"
+  ],
+  "requires_capabilities": [
+    "multiclass",
+    "onnx",
+    "scroll_pages"
+  ],
   "order": 12,
-  "tags": ["oct", "layers", "multiclass", "wavelet", "dwt", "attention", "2d"],
+  "tags": [
+    "oct",
+    "layers",
+    "multiclass",
+    "wavelet",
+    "dwt",
+    "attention",
+    "2d"
+  ],
   "config": {
     "reference": "10.1007/s40747-023-01119-y",
     "num_classes": 14,
     "classes": [
-      "background", "SRM", "HRM", "FLU", "HTD", "RPE", "RET",
-      "CHO", "VIT", "HYA", "RHS", "ART", "ERM", "SES"
+      "background",
+      "SRM",
+      "HRM",
+      "FLU",
+      "HTD",
+      "RPE",
+      "RET",
+      "CHO",
+      "VIT",
+      "HYA",
+      "RHS",
+      "ART",
+      "ERM",
+      "SES"
     ],
-    "wavelets_model": ["haar", "db2", "db4", "db6", "db8", "sym4", "sym8"],
-    "wavelets_explorer": ["haar", "db2", "db4", "db6", "db8", "sym4", "sym8",
-                          "bior2.2", "bior4.4", "rbio2.2", "rbio4.4"]
+    "wavelets_model": [
+      "haar",
+      "db2",
+      "db4",
+      "db6",
+      "db8",
+      "sym4",
+      "sym8"
+    ],
+    "wavelets_explorer": [
+      "haar",
+      "db2",
+      "db4",
+      "db6",
+      "db8",
+      "sym4",
+      "sym8",
+      "bior2.2",
+      "bior4.4",
+      "rbio2.2",
+      "rbio4.4"
+    ]
   }
 }

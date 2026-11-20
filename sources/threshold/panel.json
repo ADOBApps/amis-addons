@@ -1,0 +1,54 @@
+{
+  "amis_panel": 1,
+  "title": "Otsu threshold",
+  "width": 560,
+  "height": 680,
+  "metadata": {
+    "note": "Reference addon: no PyTorch, no model.py - the whole GUI is this document."
+  },
+  "root": {
+    "type": "vbox",
+    "children": [
+      {
+        "type": "scroll",
+        "children": [
+          {
+            "type": "label",
+            "name": "intro",
+            "props": {
+              "text": "Classical baseline. Segments an image with Otsu's method and reports the metrics against a sibling mask, so any new deep model can be compared on the same ground truth.",
+              "wrap": true
+            }
+          },
+          {
+            "type": "group",
+            "props": {"title": "Input"},
+            "children": [
+              {
+                "type": "file",
+                "name": "image_path",
+                "props": {"label": "Image", "mode": "open", "filter": "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)"}
+              },
+              {
+                "type": "check",
+                "name": "invert",
+                "props": {"text": "Invert (bright object on dark background)", "checked": false}
+              }
+            ]
+          },
+          {
+            "type": "hbox",
+            "children": [
+              {"type": "button", "name": "run", "props": {"label": "Segment"}, "on_click": "on_run_clicked"},
+              {"type": "button", "name": "save", "props": {"label": "Save mask..."}, "on_click": "on_save_clicked"},
+              {"type": "spacer", "props": {"height": 1}}
+            ]
+          },
+          {"type": "image", "name": "preview", "props": {"height": 260}},
+          {"type": "label", "name": "metrics", "props": {"text": "", "wrap": true}},
+          {"type": "text", "name": "log", "props": {"text": "", "rows": 4}}
+        ]
+      }
+    ]
+  }
+}

@@ -47,7 +47,7 @@ from amis.core.addon_api import AddonBase
 from amis.ml import data as data_io
 from amis.ml import metrics as metric_lib
 from amis.ml.trainer import Trainer, TrainingConfig
-from amis.ui.designer.render import DirField, FileField, ImageView
+from amis.ui.designer.render import DirField, FileField, ImageView, ScrollPage
 from amis.ui.locale import c_locale
 
 from . import wavelib
@@ -100,8 +100,9 @@ class RefWranetPanel(QWidget):
 
     # ==================================================== layers tab ====
     def _build_layers_tab(self) -> QWidget:
-        page = QWidget()
-        outer = QVBoxLayout(page)
+        # a scroll page: the tab has ~1000 px of controls, the window may not
+        page = ScrollPage()
+        outer = page.body
 
         intro = QLabel(
             "Multi-class retinal segmentation with the WRANet backbone: one output "
@@ -238,8 +239,8 @@ class RefWranetPanel(QWidget):
 
     # ======================================================= DWT tab ====
     def _build_dwt_tab(self) -> QWidget:
-        page = QWidget()
-        outer = QVBoxLayout(page)
+        page = ScrollPage()
+        outer = page.body
 
         intro = QLabel(
             "A 2-D discrete wavelet transform replaces pooling. The wavelet functions "
@@ -274,7 +275,7 @@ class RefWranetPanel(QWidget):
             box_layout = QVBoxLayout(box)
             caption = QLabel(wavelib.describe_band(band))
             caption.setWordWrap(True)
-            view = ImageView(150)
+            view = ImageView(140)
             box_layout.addWidget(view)
             box_layout.addWidget(caption)
             grid.addWidget(box, position // 2, position % 2)
@@ -283,7 +284,7 @@ class RefWranetPanel(QWidget):
 
         self.dwt_text = QTextEdit()
         self.dwt_text.setReadOnly(True)
-        self.dwt_text.setMinimumHeight(150)
+        self.dwt_text.setMinimumHeight(110)
         outer.addWidget(self.dwt_text)
         return page
 

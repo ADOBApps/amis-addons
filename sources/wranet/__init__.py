@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 from amis.core.addon_api import AddonBase
 from amis.ml import data as data_io
 from amis.ml import metrics as metric_lib
-from amis.ui.designer.render import DirField, FileField, ImageView
+from amis.ui.designer.render import DirField, FileField, ImageView, ScrollPage
 from amis.ui.locale import c_locale
 
 from .model import DEFAULT_CONFIG, build_model, count_parameters
@@ -83,8 +83,8 @@ class WranetPanel(QWidget):
 
     # ---------------------------------------------------------------- tabs
     def _build_data_tab(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
+        page = ScrollPage()
+        layout = page.body
 
         self.images_dir = DirField("Images", "")
         self.masks_dir = DirField("Masks", "")
@@ -103,8 +103,8 @@ class WranetPanel(QWidget):
         return page
 
     def _build_model_tab(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
+        page = ScrollPage()
+        layout = page.body
         box = QGroupBox("WRANet configuration")
         form = QFormLayout(box)
 
@@ -150,8 +150,8 @@ class WranetPanel(QWidget):
         return page
 
     def _build_train_tab(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
+        page = ScrollPage()
+        layout = page.body
         box = QGroupBox("Training")
         form = QFormLayout(box)
 
@@ -218,8 +218,8 @@ class WranetPanel(QWidget):
         return page
 
     def _build_predict_tab(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
+        page = ScrollPage()
+        layout = page.body
 
         self.predict_file = FileField("Image", "open", "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)")
         self.weights_field = FileField("Weights", "open", "PyTorch (*.pt *.pth)")
@@ -258,7 +258,7 @@ class WranetPanel(QWidget):
         self.predict_status = QLabel("")
         self.predict_status.setWordWrap(True)
 
-        self.preview = ImageView(320)
+        self.preview = ImageView(300)
         self.metrics_label = QLabel("")
         self.metrics_label.setWordWrap(True)
 
@@ -274,8 +274,8 @@ class WranetPanel(QWidget):
         return page
 
     def _build_export_tab(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
+        page = ScrollPage()
+        layout = page.body
 
         self.onnx_output = FileField("ONNX output", "save", "ONNX (*.onnx)")
         export = QPushButton("Export ONNX")
