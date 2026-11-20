@@ -227,6 +227,16 @@ class WranetPanel(QWidget):
         self.threshold_spin.setSingleStep(0.05)
         self.threshold_spin.setValue(0.5)
 
+        # A fully convolutional net *runs* at any size, but the model was
+        # trained at ``img_size``.  Resizing the input to that size and
+        # upsampling the probability back keeps inference in the regime the
+        # weights were fitted for; without it the numbers silently degrade.
+        self.resize_check = QCheckBox("Predict at the training size")
+        self.resize_check.setChecked(True)
+        self.resize_check.setToolTip(
+            "Resize the slice to the image size used for training, predict, then "
+            "upsample the probability map back to the original resolution.")
+
         row = QHBoxLayout()
         run = QPushButton("Segment")
         run.clicked.connect(self.on_predict_clicked)
@@ -244,6 +254,7 @@ class WranetPanel(QWidget):
 
         layout.addWidget(self.predict_file)
         layout.addWidget(self.weights_field)
+        layout.addWidget(self.resize_check)
         layout.addLayout(row)
         layout.addWidget(self.preview, 1)
         layout.addWidget(self.metrics_label)
@@ -416,12 +427,23 @@ class WranetPanel(QWidget):
                 input_size=self.size_spin.value(),
             )
             image = data_io.load_gray(image_path)
-            self._last_prediction = segmenter.predict(image)
-            self.preview.set_image(self._last_prediction)
+            native = image.shape
+            training_size = int(self.size_spin.value())
+            if self.resize_check.isChecked() and training_size > 0:
+                working = data_io.load_gray(image_path, training_size)
+            else:
+                working = image
+
+            probability = segmenter.predict(working)
+            if working.shape != native:
+                probability = self._to_shape(probability, native)
+
+            self._last_prediction = probability
+            self.preview.set_image(probability)
 
             mask_path = self._sibling_mask(image_path)
             if mask_path is not None:
-                truth = data_io.load_mask(mask_path, image.shape)
+                truth = data_io.load_mask(mask_path, native)
                 values = metric_lib.all_metrics(self._last_prediction, truth)
                 self.metrics_label.setText(
                     f"dice {values['dice']:.4f}  iou {values['iou']:.4f}  "
@@ -494,8 +516,24 @@ class WranetPanel(QWidget):
 
     # --------------------------------------------------------------- helpers
     @staticmethod
-    def _sibling_mask(image_path: str) -> Optional[Path]:
+    def _to_shape(probability, shape):
+        """Bilinear resize of a float probability map (never nearest)."""
+        from PIL import Image
+
+        scaled = np.clip(np.asarray(probability, dtype=np.float32), 0.0, 1.0) * 65535.0
+        image = Image.fromarray(scaled.astype(np.uint16))
+        image = image.resize((shape[1], shape[0]), Image.BILINEAR)
+        return np.asarray(image, dtype=np.float32) / 65535.0
+
+    def _sibling_mask(self, image_path: str) -> Optional[Path]:
+        """Ground truth: the Masks folder first, then a sibling with another suffix."""
         image = Path(image_path)
+        masks_dir = self.masks_dir.path()
+        if masks_dir:
+            for suffix in (".png", ".tif", ".tiff", ".bmp"):
+                candidate = Path(masks_dir) / f"{image.stem}{suffix}"
+                if candidate.is_file():
+                    return candidate
         for suffix in (".png", ".tif", ".tiff", ".bmp"):
             candidate = image.with_suffix(suffix)
             if candidate.is_file() and candidate != image:

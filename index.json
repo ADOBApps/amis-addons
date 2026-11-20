@@ -2,7 +2,7 @@
   "schema": 1,
   "name": "AMIS addons",
   "description": "Segmentation methods for the AMIS addon marketplace. Packages are release assets; this file is the catalogue.",
-  "updated": "2026-11-19T00:00:00Z",
+  "updated": "2026-11-20T00:00:00Z",
   "addons": [
     {
       "id": "wranet",
@@ -29,6 +29,17 @@
           "size": 9684,
           "changelog": "First standalone release; 32.47 M parameters at the defaults.",
           "published": "2026-11-19T00:00:00Z",
+          "yanked": false
+        },
+        {
+          "version": "1.0.1",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/wranet-v1.0.1/wranet-1.0.1.zip",
+          "sha256": "39256c20f03ee3e8b1288b7faf05e5bafb01cc96429012e6ca735e275c5bb2c6",
+          "size": 10252,
+          "changelog": "Predict at the training size (resize in, upsample the probability back), and metrics resolve the ground truth from the Masks folder. Weights from 1.0.0 load unchanged.",
+          "published": "2026-11-20T00:00:00Z",
           "yanked": false
         }
       ]
