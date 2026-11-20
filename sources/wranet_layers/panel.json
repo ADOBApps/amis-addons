@@ -1,0 +1,134 @@
+{
+  "amis_panel": 1,
+  "title": "WRANet Layers",
+  "width": 620,
+  "height": 760,
+  "metadata": {
+    "note": "Multi-class retinal layer segmentation: one output channel per class."
+  },
+  "root": {
+    "type": "vbox",
+    "children": [
+      {
+        "type": "scroll",
+        "children": [
+          {
+            "type": "label",
+            "name": "intro",
+            "props": {
+              "text": "WRANet backbone with one logit per class. The wavelet downsampling keeps the low-frequency sub-band (thin layer boundaries survive) and the attention gates re-weight the skips. Masks are class-index PNGs: class i is masks/ value i, described by classes.json next to the folders.",
+              "wrap": true
+            }
+          },
+          {
+            "type": "group",
+            "props": {"title": "Data"},
+            "children": [
+              {"type": "dir", "name": "images_dir", "props": {"label": "Images"}},
+              {"type": "dir", "name": "masks_dir", "props": {"label": "Masks (class index)"}},
+              {"type": "button", "name": "scan", "props": {"label": "Scan dataset"},
+               "on_click": "on_scan_clicked"},
+              {"type": "label", "name": "dataset_info",
+               "props": {"text": "No dataset scanned", "wrap": true}}
+            ]
+          },
+          {
+            "type": "group",
+            "props": {"title": "Model"},
+            "children": [
+              {"type": "spin", "name": "num_classes",
+               "props": {"label": "Classes (if no classes.json)", "value": 14,
+                         "minimum": 2, "maximum": 32, "step": 1}},
+              {"type": "spin", "name": "base_channels",
+               "props": {"label": "Base channels", "value": 16,
+                         "minimum": 8, "maximum": 64, "step": 8}},
+              {"type": "spin", "name": "depth",
+               "props": {"label": "Depth", "value": 4, "minimum": 2, "maximum": 5, "step": 1}},
+              {"type": "combo", "name": "wavelet",
+               "props": {"label": "Wavelet", "items": ["haar", "db2", "db4"], "current": 0}},
+              {"type": "check", "name": "keep_high",
+               "props": {"text": "Propagate high-frequency sub-bands (ablation)",
+                         "checked": false}},
+              {"type": "dspin", "name": "dropout",
+               "props": {"label": "Dropout", "value": 0.0, "minimum": 0.0,
+                         "maximum": 0.8, "step": 0.05, "decimals": 2}},
+              {"type": "button", "name": "inspect_model",
+               "props": {"label": "Count parameters"}, "on_click": "on_inspect_clicked"}
+            ]
+          },
+          {
+            "type": "group",
+            "props": {"title": "Training"},
+            "children": [
+              {"type": "spin", "name": "epochs",
+               "props": {"label": "Epochs", "value": 20, "minimum": 1, "maximum": 500}},
+              {"type": "spin", "name": "batch",
+               "props": {"label": "Batch size", "value": 2, "minimum": 1, "maximum": 32}},
+              {"type": "dspin", "name": "lr",
+               "props": {"label": "Learning rate", "value": 0.001, "minimum": 0.000001,
+                         "maximum": 1.0, "step": 0.0001, "decimals": 6}},
+              {"type": "spin", "name": "img_size",
+               "props": {"label": "Image size", "value": 192, "minimum": 64,
+                         "maximum": 1024, "step": 32}},
+              {"type": "dspin", "name": "val_fraction",
+               "props": {"label": "Validation fraction", "value": 0.2, "minimum": 0.0,
+                         "maximum": 0.6, "step": 0.05, "decimals": 2}},
+              {"type": "combo", "name": "device",
+               "props": {"label": "Device", "items": ["auto", "cpu", "cuda", "mps"],
+                         "current": 0}},
+              {
+                "type": "hbox",
+                "children": [
+                  {"type": "button", "name": "start", "props": {"label": "Start training"},
+                   "on_click": "on_start_clicked"},
+                  {"type": "button", "name": "stop", "props": {"label": "Stop"},
+                   "on_click": "on_stop_clicked"},
+                  {"type": "spacer", "props": {"height": 1}}
+                ]
+              },
+              {"type": "progress", "name": "progress",
+               "props": {"minimum": 0, "maximum": 100, "value": 0}}
+            ]
+          },
+          {
+            "type": "group",
+            "props": {"title": "Predict"},
+            "children": [
+              {"type": "file", "name": "image_path",
+               "props": {"label": "Image", "mode": "open",
+                         "filter": "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)"}},
+              {"type": "file", "name": "weights_path",
+               "props": {"label": "Weights", "mode": "open", "filter": "PyTorch (*.pt *.pth)"}},
+              {
+                "type": "hbox",
+                "children": [
+                  {"type": "button", "name": "predict", "props": {"label": "Segment layers"},
+                   "on_click": "on_predict_clicked"},
+                  {"type": "button", "name": "save_mask",
+                   "props": {"label": "Save class map..."},
+                   "on_click": "on_save_mask_clicked"},
+                  {"type": "spacer", "props": {"height": 1}}
+                ]
+              },
+              {"type": "image", "name": "preview", "props": {"height": 260}},
+              {"type": "label", "name": "metrics", "props": {"text": "", "wrap": true}},
+              {"type": "label", "name": "per_class", "props": {"text": "", "wrap": true}}
+            ]
+          },
+          {
+            "type": "group",
+            "props": {"title": "Export"},
+            "children": [
+              {"type": "file", "name": "onnx_path",
+               "props": {"label": "ONNX output", "mode": "save", "filter": "ONNX (*.onnx)"}},
+              {"type": "button", "name": "export_onnx", "props": {"label": "Export ONNX"},
+               "on_click": "on_export_clicked"}
+            ]
+          },
+          {"type": "group", "props": {"title": "Log"},
+           "children": [{"type": "text", "name": "log", "props": {"text": "", "rows": 8}}]}
+        ]
+      }
+    ]
+  }
+}

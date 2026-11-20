@@ -1,0 +1,22 @@
+{
+  "id": "wranet_layers",
+  "name": "WRANet Layers",
+  "version": "1.0.0",
+  "api": 1,
+  "author": "AMIS core team",
+  "license": "GPL-3.0-or-later",
+  "description": "WRANet backbone with one output channel per class, for retinal layer and fluid segmentation (14 OCTAVE classes).",
+  "category": "segmentation",
+  "main": "__init__.py",
+  "capabilities": ["train", "predict", "export"],
+  "order": 15,
+  "tags": ["oct", "layers", "multiclass", "wavelet", "attention", "2d"],
+  "config": {
+    "reference": "10.1007/s40747-023-01119-y",
+    "num_classes": 14,
+    "classes": [
+      "background", "SRM", "HRM", "FLU", "HTD", "RPE", "RET",
+      "CHO", "VIT", "HYA", "RHS", "ART", "ERM", "SES"
+    ]
+  }
+}

@@ -26,6 +26,7 @@ No account, token or subscription is needed to browse or install.
 
 | id | name | licence | what it is | params |
 |---|---|---|---|---|
+| `wranet_layers` | WRANet Layers | GPL-3.0-or-later | multi-class retinal layers and fluid spaces (14 classes); needs AMIS 0.1.3 | 32.47 M (base 64) |
 | `wranet` | WRANet | GPL-3.0-or-later | wavelet residual attention U-Net (Zhao et al., 2023); the project's reference method, shipped as an addon so it iterates without rebuilding the app | 32.47 M |
 | `attention_unet` | Attention U-Net | GPL-3.0-or-later | Oktay et al. (2018) attention-gated U-Net; ablation baseline for WRANet | 0.09 M |
 | `unet` | U-Net | GPL-3.0-or-later | Ronneberger et al. (2015) reference architecture | 22.45 M |

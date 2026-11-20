@@ -245,6 +245,36 @@
           "yanked": false
         }
       ]
+    },
+    {
+      "id": "wranet_layers",
+      "name": "WRANet Layers",
+      "description": "WRANet backbone with one output channel per class: retinal layers and fluid spaces in one pass (14 OCTAVE classes). Wavelet downsampling keeps the thin layer boundaries; attention gates re-weight the skips.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "segmentation",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": [
+        "oct",
+        "layers",
+        "multiclass",
+        "wavelet",
+        "attention",
+        "2d"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "api": 1,
+          "min_amis": "0.1.3",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/wranet_layers-v1.0.0/wranet_layers-1.0.0.zip",
+          "sha256": "b18701b30fd065e73ad510d5158b06fbeb2498b469f12e936bff7a46463b8f4a",
+          "size": 11904,
+          "changelog": "First release: multi-class layer segmentation on the WRANet backbone (CE + Dice, per-class metrics, class-index masks, ONNX export with N channels). Requires AMIS 0.1.3 for the multi-class trainer.",
+          "published": "2026-11-20T00:00:00Z",
+          "yanked": false
+        }
+      ]
     }
   ]
 }
