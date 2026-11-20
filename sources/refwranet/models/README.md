@@ -11,6 +11,7 @@ panel uses it automatically when no `.pt` and no ONNX file is selected.
 | output | **14 channels** of logits (apply softmax over the channel axis, then argmax) |
 | opset | 17, dynamic batch |
 | parameters | 2.03 M (base 16, depth 4, haar) |
+| sizing | fixed at 160; the panel adopts that value when the model is selected |
 | parity | max \|PyTorch − ONNX Runtime\| = 3.3e-06 |
 
 In the *Layers* tab set **Image size = 160**; the panel resizes the slice, runs

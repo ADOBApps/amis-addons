@@ -50,6 +50,17 @@
       ],
       "versions": [
         {
+          "version": "1.1.1",
+          "api": 1,
+          "min_amis": "0.1.4",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/refwranet-v1.1.1/refwranet-1.1.1.zip",
+          "sha256": "c4441435b0b74e77bc3fb252d85c74d289898bd35b37dbf954b0f098c5220dda",
+          "size": 7554702,
+          "changelog": "ONNX prediction uses the model's own input size (the bundled model is 160 px; a stale Image size gave 'Got: 192 Expected: 160'). sym6 added: 12 taps, orthogonal, available to the network and the DWT tab. Scrolls without requiring 0.1.5: local ScrollPage fallback, so it installs on 0.1.4 again. Model unchanged.",
+          "published": "2026-11-20T00:00:00Z",
+          "yanked": false
+        },
+        {
           "version": "1.1.0",
           "api": 1,
           "min_amis": "0.1.5",
@@ -89,6 +100,17 @@
         "learned"
       ],
       "versions": [
+        {
+          "version": "1.1.3",
+          "api": 1,
+          "min_amis": "0.1.4",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/wranet-v1.1.3/wranet-1.1.3.zip",
+          "sha256": "eb0f3b0287c980a852bae8f1b0728cfdf89c911d32626feab8ee7f2c55b83773",
+          "size": 7557859,
+          "changelog": "Layout only: the five tabs scroll, with a self-contained scroll page, so the addon installs on 0.1.4 as well as 0.1.5. Model and bundled ONNX unchanged.",
+          "published": "2026-11-20T00:00:00Z",
+          "yanked": false
+        },
         {
           "version": "1.1.2",
           "api": 1,

@@ -38,7 +38,32 @@ from PySide6.QtWidgets import (
 from amis.core.addon_api import AddonBase
 from amis.ml import data as data_io
 from amis.ml import metrics as metric_lib
-from amis.ui.designer.render import DirField, FileField, ImageView, ScrollPage
+from amis.ui.designer.render import DirField, FileField, ImageView
+
+try:                                  # AMIS >= 0.1.5 ships ScrollPage
+    from amis.ui.designer.render import ScrollPage
+except ImportError:                   # 0.1.4 and older: same behaviour, local
+    from PySide6.QtWidgets import QFrame, QScrollArea
+
+    class ScrollPage(QWidget):        # noqa: F811 - deliberate shadowing
+        """A page whose body scrolls (fallback for cores without ScrollPage)."""
+
+        def __init__(self, parent=None) -> None:
+            super().__init__(parent)
+            outer = QVBoxLayout(self)
+            outer.setContentsMargins(0, 0, 0, 0)
+            self.scroll = QScrollArea(self)
+            self.scroll.setWidgetResizable(True)
+            self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+            self.scroll.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            content = QWidget()
+            self.body = QVBoxLayout(content)
+            self.body.setContentsMargins(6, 6, 6, 6)
+            self.body.setSpacing(6)
+            self.scroll.setWidget(content)
+            outer.addWidget(self.scroll)
+
 from amis.ui.locale import c_locale
 
 from .model import DEFAULT_CONFIG, build_model, count_parameters

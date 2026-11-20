@@ -1,11 +1,11 @@
 {
   "id": "refwranet",
   "name": "refWRANet",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "api": 1,
   "author": "AMIS core team",
   "license": "GPL-3.0-or-later",
-  "description": "Multilayer retinal segmentation with a wavelet residual attention U-Net, plus a step-by-step 2-D DWT explorer (LL/LH/HL/HH, Haar, Daubechies, Symlets, biorthogonal). Scrolls on small screens.",
+  "description": "Multilayer retinal segmentation with a wavelet residual attention U-Net, plus a step-by-step 2-D DWT explorer (LL/LH/HL/HH, Haar, Daubechies, Symlets 4/6/8, biorthogonal). Scrolls on small screens.",
   "category": "segmentation",
   "main": "__init__.py",
   "capabilities": [
@@ -15,8 +15,7 @@
   ],
   "requires_capabilities": [
     "multiclass",
-    "onnx",
-    "scroll_pages"
+    "onnx"
   ],
   "order": 12,
   "tags": [
@@ -54,6 +53,7 @@
       "db6",
       "db8",
       "sym4",
+      "sym6",
       "sym8"
     ],
     "wavelets_explorer": [
@@ -63,6 +63,7 @@
       "db6",
       "db8",
       "sym4",
+      "sym6",
       "sym8",
       "bior2.2",
       "bior4.4",

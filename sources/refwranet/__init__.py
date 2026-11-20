@@ -47,7 +47,32 @@ from amis.core.addon_api import AddonBase
 from amis.ml import data as data_io
 from amis.ml import metrics as metric_lib
 from amis.ml.trainer import Trainer, TrainingConfig
-from amis.ui.designer.render import DirField, FileField, ImageView, ScrollPage
+from amis.ui.designer.render import DirField, FileField, ImageView
+
+try:                                  # AMIS >= 0.1.5 ships ScrollPage
+    from amis.ui.designer.render import ScrollPage
+except ImportError:                   # 0.1.4 and older: same behaviour, local
+    from PySide6.QtWidgets import QFrame, QScrollArea
+
+    class ScrollPage(QWidget):        # noqa: F811 - deliberate shadowing
+        """A page whose body scrolls (fallback for cores without ScrollPage)."""
+
+        def __init__(self, parent=None) -> None:
+            super().__init__(parent)
+            outer = QVBoxLayout(self)
+            outer.setContentsMargins(0, 0, 0, 0)
+            self.scroll = QScrollArea(self)
+            self.scroll.setWidgetResizable(True)
+            self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+            self.scroll.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            content = QWidget()
+            self.body = QVBoxLayout(content)
+            self.body.setContentsMargins(6, 6, 6, 6)
+            self.body.setSpacing(6)
+            self.scroll.setWidget(content)
+            outer.addWidget(self.scroll)
+
 from amis.ui.locale import c_locale
 
 from . import wavelib
@@ -453,24 +478,34 @@ class RefWranetPanel(QWidget):
                     onnx = str(bundled[0])
                     self.onnx_path.set_path(onnx)
 
-            size = self.size_spin.value()
             image = data_io.load_gray(path)
-            working = data_io.load_gray(path, size)
+            size = self.size_spin.value()
 
             if onnx:
                 session = OnnxSegmenter(onnx)
+                # An exported model declares the size it was traced at; the panel
+                # cannot override it. Feeding the spin value gave
+                # "Got 192 Expected 160" from ONNX Runtime.
+                model_size = session.recommended_size()
+                if model_size and model_size != size:
+                    self._echo(f"ONNX model is fixed at {model_size} px; "
+                               f"using it instead of {size} (the panel is updated)")
+                    self.size_spin.setValue(model_size)
+                    size = model_size
+                working = data_io.load_gray(path, size)
                 logits = session.session.run(
                     None, {session.input_name: working[None, None].astype(np.float32)})[0]
                 classes = np.argmax(logits[0], axis=0).astype(np.int64)
-                backend = "ONNX Runtime"
+                backend = f"ONNX Runtime [{size} px]"
             else:
+                working = data_io.load_gray(path, size)
                 segmenter = make_segmenter(build_model=build_model,
                                            config=self.model_config(),
                                            weights=weights or None)
                 with torch.no_grad():
                     logits = segmenter.model(torch.from_numpy(working)[None, None])
                     classes = torch.argmax(logits, dim=1)[0].cpu().numpy()
-                backend = "PyTorch"
+                backend = f"PyTorch [{size} px]"
 
             if classes.shape != image.shape:
                 from PIL import Image
