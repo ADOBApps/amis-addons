@@ -221,6 +221,9 @@ class WranetPanel(QWidget):
 
         self.predict_file = FileField("Image", "open", "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)")
         self.weights_field = FileField("Weights", "open", "PyTorch (*.pt *.pth)")
+        # An exported ONNX model carries the trained network and runs without
+        # torch weights; keep both paths so a shipped .onnx is usable as-is.
+        self.onnx_field = FileField("ONNX model", "open", "ONNX (*.onnx)")
         self.threshold_spin = QDoubleSpinBox()
         self.threshold_spin.setLocale(c_locale())
         self.threshold_spin.setRange(0.0, 1.0)
@@ -254,6 +257,7 @@ class WranetPanel(QWidget):
 
         layout.addWidget(self.predict_file)
         layout.addWidget(self.weights_field)
+        layout.addWidget(self.onnx_field)
         layout.addWidget(self.resize_check)
         layout.addLayout(row)
         layout.addWidget(self.preview, 1)
@@ -420,12 +424,25 @@ class WranetPanel(QWidget):
                     self.sig_log.emit(f"using {weights}")
             from amis.ml.backend import make_segmenter
 
-            segmenter = make_segmenter(
-                build_model=build_model,
-                config=self.model_config(),
-                weights=weights or None,
-                input_size=self.size_spin.value(),
-            )
+            onnx_path = self.onnx_field.path()
+            if not onnx_path:
+                bundled = sorted((Path(self.context.addon_dir) / "models").glob("*.onnx"))
+                if bundled and not weights:
+                    onnx_path = str(bundled[0])
+                    self.onnx_field.set_path(onnx_path)
+                    self.sig_log.emit(f"using bundled model {onnx_path}")
+
+            if onnx_path:
+                segmenter = make_segmenter(
+                    onnx_model=onnx_path, input_size=self.size_spin.value())
+                self.sig_log.emit(f"inference backend: ONNX ({Path(onnx_path).name})")
+            else:
+                segmenter = make_segmenter(
+                    build_model=build_model,
+                    config=self.model_config(),
+                    weights=weights or None,
+                    input_size=self.size_spin.value(),
+                )
             image = data_io.load_gray(image_path)
             native = image.shape
             training_size = int(self.size_spin.value())

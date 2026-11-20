@@ -41,6 +41,17 @@
           "changelog": "Predict at the training size (resize in, upsample the probability back), and metrics resolve the ground truth from the Masks folder. Weights from 1.0.0 load unchanged.",
           "published": "2026-11-20T00:00:00Z",
           "yanked": false
+        },
+        {
+          "version": "1.0.2",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/wranet-v1.0.2/wranet-1.0.2.zip",
+          "sha256": "c09f4818af19d82a03d88a57f80ff32979cd6eeecd8a6e45b938fbcd3ceee721",
+          "size": 10476,
+          "changelog": "ONNX model field and bundled models/*.onnx fallback, so an addon can ship a trained network; scripts/export_onnx.py verifies parity.",
+          "published": "2026-11-20T00:00:00Z",
+          "yanked": false
         }
       ]
     },

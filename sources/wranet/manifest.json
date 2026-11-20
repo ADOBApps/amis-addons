@@ -1,7 +1,7 @@
 {
   "id": "wranet",
   "name": "WRANet",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "api": 1,
   "author": "AMIS core team",
   "description": "Wavelet residual attention U-Net (Zhao et al., 2023): DWT downsampling, attention-gated skips, BCE+Dice training.",
