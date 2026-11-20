@@ -5,6 +5,37 @@
   "updated": "2026-11-20T00:00:00Z",
   "addons": [
     {
+      "id": "refwranet",
+      "name": "refWRANet",
+      "description": "Multilayer retinal segmentation with a wavelet residual attention U-Net, plus a step-by-step 2-D DWT explorer (LL/LH/HL/HH, Haar, Daubechies, Symlets, biorthogonal). Bundled demo model: mean class Dice 0.636 on OCTAVE layers.",
+      "author": "AMIS core team",
+      "license": "GPL-3.0-or-later",
+      "category": "segmentation",
+      "homepage": "https://github.com/ADOBApps/advancedmedicalis",
+      "tags": [
+        "oct",
+        "layers",
+        "multiclass",
+        "wavelet",
+        "dwt",
+        "attention",
+        "2d"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "api": 1,
+          "min_amis": "0.1.3",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/refwranet-v1.0.0/refwranet-1.0.0.zip",
+          "sha256": "a31cc38f9e056dd8b0cc499a780bdae770c5990f658ba9b34a79b6e027c2341a",
+          "size": 7553887,
+          "changelog": "First release: 14-class retinal layers with the WRANet backbone, per-class Dice, colour class maps, ONNX export, and a 2-D DWT teaching tab across Haar/Daubechies/Symlets/biorthogonal families. Bundled demo model (3 volumes, mean class Dice 0.636). Requires AMIS 0.1.3.",
+          "published": "2026-11-20T00:00:00Z",
+          "yanked": false
+        }
+      ]
+    },
+    {
       "id": "wranet",
       "name": "WRANet",
       "description": "Wavelet residual attention U-Net (Zhao et al., 2023): fixed DWT downsampling keeps only the low-frequency sub-band, residual attention gates the skips. The reference method of the AMIS project.",

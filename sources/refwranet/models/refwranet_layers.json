@@ -1,0 +1,21 @@
+{
+  "model": "RefWRANet",
+  "opset": 17,
+  "input_size": 160,
+  "input_name": "input",
+  "output_name": "logits",
+  "input_layout": "NCHW",
+  "input_channels": 1,
+  "output_activation": "none (logits; apply sigmoid)",
+  "model_config": {
+    "num_classes": 14,
+    "out_channels": 14,
+    "base_channels": 16,
+    "depth": 4,
+    "wavelet": "haar"
+  },
+  "parameters_m": 2.033,
+  "path": "/tmp/opencode/refwranet_run/refwranet_layers.onnx",
+  "parity_max_abs_diff": 3.337860107421875e-06,
+  "verified": true
+}
