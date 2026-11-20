@@ -63,6 +63,17 @@
           "changelog": "Trained model bundled: WRANet 2.03 M parameters on OCTAVE FLU, 192 px, Dice 0.450 on fluid validation slices; ONNX included with parity 5.7e-06. Code GPL-3.0, weights CC BY-SA 4.0.",
           "published": "2026-11-20T00:00:00Z",
           "yanked": false
+        },
+        {
+          "version": "1.1.1",
+          "api": 1,
+          "min_amis": "0.1.0",
+          "url": "https://github.com/ADOBApps/amis-addons/releases/download/wranet-v1.1.1/wranet-1.1.1.zip",
+          "sha256": "380b0fa31594a06eccb1160758305b575b3ab44a45caed13f9df260699ec1e12",
+          "size": 7557536,
+          "changelog": "ONNX: use the model's declared input size (a 192 px export no longer fails with 'Got 256 Expected 192'); progress bar, status and wait cursor while segmenting.",
+          "published": "2026-11-20T00:00:00Z",
+          "yanked": false
         }
       ]
     },

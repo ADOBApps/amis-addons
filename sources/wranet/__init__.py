@@ -16,6 +16,7 @@ import numpy as np
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QProgressBar,
     QLabel,
     QListWidget,
     QPushButton,
@@ -251,6 +253,11 @@ class WranetPanel(QWidget):
         row.addWidget(self.threshold_spin)
         row.addStretch(1)
 
+        self.predict_progress = QProgressBar()
+        self.predict_progress.setVisible(False)
+        self.predict_status = QLabel("")
+        self.predict_status.setWordWrap(True)
+
         self.preview = ImageView(320)
         self.metrics_label = QLabel("")
         self.metrics_label.setWordWrap(True)
@@ -260,6 +267,8 @@ class WranetPanel(QWidget):
         layout.addWidget(self.onnx_field)
         layout.addWidget(self.resize_check)
         layout.addLayout(row)
+        layout.addWidget(self.predict_progress)
+        layout.addWidget(self.predict_status)
         layout.addWidget(self.preview, 1)
         layout.addWidget(self.metrics_label)
         return page
@@ -414,6 +423,13 @@ class WranetPanel(QWidget):
         image_path = self.predict_file.path()
         if not image_path:
             return
+
+        self.predict_progress.setVisible(True)
+        self.predict_progress.setRange(0, 0)      # indeterminate: one image
+        self.predict_status.setText("segmenting…")
+        self.tabs.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
         try:
             weights = self.weights_field.path()
             if not weights:
@@ -443,13 +459,23 @@ class WranetPanel(QWidget):
                     weights=weights or None,
                     input_size=self.size_spin.value(),
                 )
+            # An exported ONNX model may bake in its input size; that size wins
+            # over the "Image size" spin, otherwise ONNX Runtime rejects the
+            # tensor with "Got: 256 Expected: 192".
+            model_size = 0
+            if hasattr(segmenter, "recommended_size"):
+                model_size = segmenter.recommended_size() or 0
+
             image = data_io.load_gray(image_path)
             native = image.shape
             training_size = int(self.size_spin.value())
-            if self.resize_check.isChecked() and training_size > 0:
-                working = data_io.load_gray(image_path, training_size)
-            else:
-                working = image
+            target = model_size or (training_size if self.resize_check.isChecked() else 0)
+            if model_size and training_size and model_size != training_size:
+                self.sig_log.emit(
+                    f"note: this model expects {model_size} px, ignoring Image size "
+                    f"{training_size}"
+                )
+            working = data_io.load_gray(image_path, target) if target > 0 else image
 
             probability = segmenter.predict(working)
             if working.shape != native:
@@ -470,7 +496,23 @@ class WranetPanel(QWidget):
             else:
                 self.metrics_label.setText("no ground-truth mask found next to the image")
         except Exception as exc:
+            self.predict_status.setText(f"failed: {exc}")
             self.sig_log.emit(f"prediction failed: {exc}")
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.tabs.setEnabled(True)
+            self.predict_progress.setVisible(False)
+            self.predict_progress.setRange(0, 100)
+            if not self.predict_status.text().startswith("failed"):
+                self.predict_status.setText(
+                    f"{native[1]}x{native[0]} px | {self._backend_label(segmenter)}")
+
+    @staticmethod
+    def _backend_label(segmenter) -> str:
+        name = type(segmenter).__name__
+        if name == "OnnxSegmenter":
+            return "ONNX Runtime"
+        return "PyTorch"
 
     def on_save_mask_clicked(self) -> None:
         if self._last_prediction is None:
