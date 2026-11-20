@@ -1,0 +1,18 @@
+{
+  "model": "WRANet",
+  "opset": 17,
+  "input_size": 192,
+  "input_name": "input",
+  "output_name": "logits",
+  "input_layout": "NCHW",
+  "input_channels": 1,
+  "output_activation": "none (logits; apply sigmoid)",
+  "model_config": {
+    "base_channels": 16,
+    "depth": 4
+  },
+  "parameters_m": 2.032,
+  "path": "/tmp/opencode/wranet_octave_model/wranet_octave_fluid.onnx",
+  "parity_max_abs_diff": 5.7220458984375e-06,
+  "verified": true
+}

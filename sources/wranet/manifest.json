@@ -1,7 +1,7 @@
 {
   "id": "wranet",
   "name": "WRANet",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "api": 1,
   "author": "AMIS core team",
   "description": "Wavelet residual attention U-Net (Zhao et al., 2023): DWT downsampling, attention-gated skips, BCE+Dice training.",
@@ -22,7 +22,11 @@
   "config": {
     "reference": "10.1007/s40747-023-01119-y",
     "paper_parameters_m": 34.6,
-    "paper_flops_b": 1.1
+    "paper_flops_b": 1.1,
+    "bundled_model": "models/wranet_octave_fluid.onnx",
+    "bundled_model_input": 192,
+    "bundled_model_trained_on": "OCTAVE (doi:10.5281/zenodo.14580071), FLU class",
+    "model_license": "CC-BY-SA-4.0"
   },
   "license": "GPL-3.0-or-later"
 }
