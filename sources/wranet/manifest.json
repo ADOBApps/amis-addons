@@ -1,10 +1,11 @@
 {
   "id": "wranet",
   "name": "WRANet",
-  "version": "1.1.3",
+  "version": "2.0.0",
   "api": 1,
   "author": "AMIS core team",
-  "description": "Wavelet residual attention U-Net (Zhao et al., 2023): DWT downsampling, attention-gated skips, BCE+Dice training.",
+  "license": "GPL-3.0-or-later",
+  "description": "Encoder-decoder with attention skip connections: Conv+BN+ReLU stages with MaxPool2d downsampling (DWT-LL ablation included), a residual attention module (channel + spatial gate) on every skip, transposed-conv decoding and a 1x1 14-class head - plus a training-free wavelet analysis (no weights) and the step-by-step 2-D DWT explorer. Scrolls on small screens.",
   "category": "segmentation",
   "main": "__init__.py",
   "capabilities": [
@@ -12,21 +13,141 @@
     "predict",
     "export"
   ],
+  "requires_capabilities": [
+    "multiclass",
+    "onnx"
+  ],
   "order": 10,
   "tags": [
     "unet",
-    "wavelet",
     "attention",
+    "maxpool",
+    "multiclass",
+    "analysis",
+    "oct",
     "2d"
   ],
   "config": {
     "reference": "10.1007/s40747-023-01119-y",
-    "paper_parameters_m": 34.6,
-    "paper_flops_b": 1.1,
-    "bundled_model": "models/wranet_octave_fluid.onnx",
-    "bundled_model_input": 192,
-    "bundled_model_trained_on": "OCTAVE (doi:10.5281/zenodo.14580071), FLU class",
-    "model_license": "CC-BY-SA-4.0"
-  },
-  "license": "GPL-3.0-or-later"
+    "variant": "max-pool encoder + channel/spatial residual attention on skips",
+    "num_classes": 14,
+    "classes": [
+      "background",
+      "SRM",
+      "HRM",
+      "FLU",
+      "HTD",
+      "RPE",
+      "RET",
+      "CHO",
+      "VIT",
+      "HYA",
+      "RHS",
+      "ART",
+      "ERM",
+      "SES"
+    ],
+    "img_size": 256,
+    "checkpoint_note": "2.0.0 is a new topology: the 1.1.x ONNX/.pt weights do not load. Version 1.1.4 (trained 14-class demo, Dice 0.638) remains published for pinning.",
+    "analysis": {
+      "training_free": true,
+      "description": "Fixed wavelet rules over the coefficients: forward DWT cascade (encoder), detail bands (skips), |c|/(|c|+k*sigma) gate (RAM), inverse DWT (decoder), maps (head). No weights, no classes.",
+      "threshold_modes": ["soft", "hard", "none"],
+      "gate_k_default": 3.0,
+      "outputs": ["reconstruction", "detail_energy", "gate", "band_stats_csv"],
+      "boundary": "periodized (exactly invertible); the explorer keeps the symmetric extension"
+    },
+    "downsample_options": {
+      "maxpool": "MaxPool2d(2, 2) - the architecture in the spec (default)",
+      "dwt": "LL sub-band of a fixed 2-D analysis DWT; same H/2 x W/2 and channels, so the ladder is identical (ablation)"
+    },
+    "wavelets_model": [
+      "haar",
+      "db2",
+      "db4",
+      "db6",
+      "db8",
+      "sym4",
+      "sym6",
+      "sym8"
+    ],
+    "architecture": {
+      "architecture_type": "Encoder-Decoder with Attention Skip Connections",
+      "assumed_input_spatial_size": "256x256 (Height x Width)",
+      "input_spec": {
+        "in_channels": 1,
+        "spatial_dims": "2D",
+        "tensor_shape": "[1, 256, 256]"
+      },
+      "encoder": {
+        "type": "CNN",
+        "depth": 4,
+        "base_channels": 16,
+        "channel_multiplier": 2,
+        "block_structure": "Conv+BN+ReLU",
+        "kernel_size": "3x3",
+        "downsample_op": "MaxPool2d(kernel_size=2, stride=2)",
+        "downsample_ablation": "DWT LL sub-band (haar, db2/4/6/8, sym4/6/8), same output shape",
+        "stages": [
+          {"stage": 1, "channels": 16, "spatial_output": "[16, 256, 256]"},
+          {"stage": 2, "channels": 32, "spatial_output": "[32, 128, 128]"},
+          {"stage": 3, "channels": 64, "spatial_output": "[64, 64, 64]"},
+          {"stage": 4, "channels": 128, "spatial_output": "[128, 32, 32]"}
+        ]
+      },
+      "bottleneck": {
+        "structure": "Conv+BN+ReLU",
+        "channels": 256,
+        "spatial_output": "[256, 16, 16]",
+        "note": "base_channels * (channel_multiplier ^ depth)"
+      },
+      "residual_attention_model_ram": {
+        "applied_to": "every skip connection",
+        "components": [
+          "Attention Gate (Spatial and Channel attention)",
+          "Residual Block (to preserve original features)"
+        ],
+        "repeats": 2,
+        "dropout": 0.0
+      },
+      "decoder": {
+        "type": "CNN",
+        "depth": 4,
+        "block_structure": "Upsample+Conv+BN+ReLU",
+        "kernel_size": "3x3",
+        "upsample_op": "ConvTranspose2d(kernel_size=2, stride=2)",
+        "skip_connection": "Concat(Decoder_Feature, RAM(Encoder_Feature))",
+        "stages": [
+          {"stage": 1, "in_channels": 256, "upsampled_channels": 128,
+           "skip_channels_from_RAM": 128, "spatial_output_after_concat": "[256, 32, 32]"},
+          {"stage": 2, "in_channels": 256, "upsampled_channels": 64,
+           "skip_channels_from_RAM": 64, "spatial_output_after_concat": "[128, 64, 64]"},
+          {"stage": 3, "in_channels": 128, "upsampled_channels": 32,
+           "skip_channels_from_RAM": 32, "spatial_output_after_concat": "[64, 128, 128]"},
+          {"stage": 4, "in_channels": 64, "upsampled_channels": 16,
+           "skip_channels_from_RAM": 16, "spatial_output_after_concat": "[32, 256, 256]"}
+        ]
+      },
+      "output_head": {
+        "structure": "1x1 Conv",
+        "in_channels": 32,
+        "out_channels": 14,
+        "spatial_output": "[14, 256, 256]"
+      }
+    },
+    "wavelets_explorer": [
+      "haar",
+      "db2",
+      "db4",
+      "db6",
+      "db8",
+      "sym4",
+      "sym6",
+      "sym8",
+      "bior2.2",
+      "bior4.4",
+      "rbio2.2",
+      "rbio4.4"
+    ]
+  }
 }

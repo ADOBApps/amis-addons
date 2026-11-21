@@ -1,32 +1,44 @@
-"""WRANet addon: model + panel, dropped in as a normal AMIS addon.
+"""WRANet addon: pooling encoder-decoder with RAM skip gating + a DWT explorer.
 
-This module is the template for every future method: subclass
-:class:`~amis.core.addon_api.AddonBase`, declare the model factory, build a
-panel.  Nothing here is imported by the core, so the method can be deleted,
-replaced or duplicated without touching the framework.
+Two tabs:
+
+* **Layers** - the method: data, model (width, depth, RAM repeats/dropout),
+  training with per-class Dice, prediction with a class colour map, ONNX export.
+  The architecture is the one in the addon's spec sheet: ``Conv+BN+ReLU``
+  encoder stages separated by ``MaxPool2d(2, 2)``, a bottleneck at
+  ``base * 2**depth``, a residual attention module (spatial + channel) on every
+  skip connection, ``ConvTranspose2d`` upsampling and a 1x1 output head.
+* **2-D DWT** - the teaching tab inherited from ``refwranet``: pick an image and
+  a wavelet family, press *Decompose*, and see LL/LH/HL/HH with what each band
+  contains and how much energy it carries. It is deliberately independent of
+  the network (pooling replaced the wavelet downsampling, the explorer stays
+  because it is still useful for figures).
+
+The panel prints the tensor ladder (channels and spatial size per stage) and
+recomputes it whenever a control changes, so what is built is exactly what the
+spec says.
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import numpy as np
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
-    QProgressBar,
     QLabel,
-    QListWidget,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QTabWidget,
@@ -38,6 +50,7 @@ from PySide6.QtWidgets import (
 from amis.core.addon_api import AddonBase
 from amis.ml import data as data_io
 from amis.ml import metrics as metric_lib
+from amis.ml.trainer import Trainer, TrainingConfig
 from amis.ui.designer.render import DirField, FileField, ImageView
 
 try:                                  # AMIS >= 0.1.5 ships ScrollPage
@@ -66,14 +79,22 @@ except ImportError:                   # 0.1.4 and older: same behaviour, local
 
 from amis.ui.locale import c_locale
 
-from .model import DEFAULT_CONFIG, build_model, count_parameters
+from . import analysis as analysis_lib
+from . import wavelib
+from .model import DEFAULT_CONFIG, build_model, channel_plan, count_parameters
 
 log = logging.getLogger(__name__)
 
+PALETTE = np.array([
+    [0, 0, 0], [220, 60, 60], [240, 150, 40], [40, 200, 120], [200, 200, 60],
+    [60, 120, 220], [150, 90, 220], [220, 90, 180], [90, 200, 220],
+    [160, 160, 160], [120, 200, 90], [200, 120, 60], [90, 90, 200],
+    [235, 235, 235],
+], dtype=np.uint8)
 
-# --------------------------------------------------------------------- panel
+
 class WranetPanel(QWidget):
-    """Five tabs: data, model, train, predict, export."""
+    """The addon's window: layer segmentation on one tab, DWT on the other."""
 
     sig_log = Signal(str)
     sig_epoch = Signal(dict)
@@ -84,330 +105,443 @@ class WranetPanel(QWidget):
         super().__init__()
         self.addon = addon
         self.context = addon.context
-        self.trainer = None
-        self._cases: list = []
-        self._segmenter = None
-        self._last_prediction: Optional[np.ndarray] = None
+        self._trainer = None
+        self._prediction: Optional[np.ndarray] = None
+        self._dwt_steps = None
+        self._analysis = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-
+        layout.setContentsMargins(8, 8, 8, 8)
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._build_data_tab(), "Data")
-        self.tabs.addTab(self._build_model_tab(), "Model")
-        self.tabs.addTab(self._build_train_tab(), "Train")
-        self.tabs.addTab(self._build_predict_tab(), "Predict")
-        self.tabs.addTab(self._build_export_tab(), "Export")
+        self.tabs.addTab(self._build_layers_tab(), "Layers")
+        self.tabs.addTab(self._build_dwt_tab(), "2-D DWT")
         layout.addWidget(self.tabs)
 
         self.sig_log.connect(self._append_log)
         self.sig_epoch.connect(self._on_epoch)
         self.sig_done.connect(self._on_done)
         self.sig_error.connect(self._on_error)
-        self._restore_settings()
+        self._update_architecture()
 
-    # ---------------------------------------------------------------- tabs
-    def _build_data_tab(self) -> QWidget:
+    # ==================================================== layers tab ====
+    def _build_layers_tab(self) -> QWidget:
+        # a scroll page: the tab has ~1000 px of controls, the window may not
         page = ScrollPage()
-        layout = page.body
+        outer = page.body
 
+        intro = QLabel(
+            "Multi-class retinal segmentation, encoder-decoder with attention skip "
+            "connections: Conv+BN+ReLU stages separated by MaxPool2d (or by the LL "
+            "sub-band of a DWT, as an ablation), a residual attention module "
+            "(channel + spatial gate) on every skip, transposed-conv decoding and a "
+            "1x1 class head. Masks are class-index PNGs plus classes.json.")
+        intro.setWordWrap(True)
+        outer.addWidget(intro)
+
+        data_box = QGroupBox("Data")
+        data_layout = QVBoxLayout(data_box)
         self.images_dir = DirField("Images", "")
-        self.masks_dir = DirField("Masks", "")
+        self.masks_dir = DirField("Masks (class index)", "")
         scan = QPushButton("Scan dataset")
         scan.clicked.connect(self.on_scan_clicked)
+        self.dataset_info = QLabel("No dataset scanned")
+        self.dataset_info.setWordWrap(True)
+        data_layout.addWidget(self.images_dir)
+        data_layout.addWidget(self.masks_dir)
+        data_layout.addWidget(scan)
+        data_layout.addWidget(self.dataset_info)
+        outer.addWidget(data_box)
 
-        self.dataset_label = QLabel("No dataset scanned")
-        self.dataset_label.setWordWrap(True)
-        self.case_list = QListWidget()
+        # created before the model box: the architecture label reads its value
+        self.size_spin = QSpinBox()
+        self.size_spin.setRange(64, 1024)
+        self.size_spin.setSingleStep(32)
+        self.size_spin.setValue(int(DEFAULT_CONFIG.get("img_size", 256)))
 
-        layout.addWidget(self.images_dir)
-        layout.addWidget(self.masks_dir)
-        layout.addWidget(scan)
-        layout.addWidget(self.dataset_label)
-        layout.addWidget(self.case_list, 1)
-        return page
-
-    def _build_model_tab(self) -> QWidget:
-        page = ScrollPage()
-        layout = page.body
-        box = QGroupBox("WRANet configuration")
-        form = QFormLayout(box)
-
+        model_box = QGroupBox("Model")
+        model_form = QFormLayout(model_box)
+        self.classes_spin = QSpinBox()
+        self.classes_spin.setRange(2, 32)
+        self.classes_spin.setValue(int(DEFAULT_CONFIG["num_classes"]))
         self.base_spin = QSpinBox()
-        self.base_spin.setRange(8, 128)
+        self.base_spin.setRange(8, 64)
         self.base_spin.setSingleStep(8)
         self.base_spin.setValue(int(DEFAULT_CONFIG["base_channels"]))
-
         self.depth_spin = QSpinBox()
         self.depth_spin.setRange(2, 5)
         self.depth_spin.setValue(int(DEFAULT_CONFIG["depth"]))
-
-        self.wavelet_combo = QComboBox()
-        self.wavelet_combo.addItems(["haar", "db2", "db4"])
-
+        self.downsample_combo = QComboBox()
+        self.downsample_combo.addItems(["maxpool", "dwt"])
+        self.downsample_combo.setCurrentText(str(DEFAULT_CONFIG["downsample"]))
+        self.downsample_combo.setToolTip(
+            "maxpool = the architecture in the spec; dwt = LL sub-band ablation. "
+            "Both halve the resolution and keep the channels.")
+        self.model_wavelet = QComboBox()
+        self.model_wavelet.addItems(list(wavelib.MODEL_WAVELETS))
+        self.model_wavelet.setCurrentText(str(DEFAULT_CONFIG["wavelet"]))
+        self.model_wavelet.setToolTip("Used only when downsampling is 'dwt'")
         self.repeats_spin = QSpinBox()
-        self.repeats_spin.setRange(1, 3)
-        self.repeats_spin.setValue(int(DEFAULT_CONFIG.get("repeats", 2)))
-
-        self.keep_high_check = QCheckBox("Propagate high-frequency sub-bands (ablation)")
+        self.repeats_spin.setRange(1, 4)
+        self.repeats_spin.setValue(int(DEFAULT_CONFIG["repeats"]))
+        self.repeats_spin.setToolTip(
+            "Conv+BN+ReLU units inside each residual attention block")
         self.dropout_spin = QDoubleSpinBox()
         self.dropout_spin.setLocale(c_locale())
-        self.dropout_spin.setRange(0.0, 0.8)
+        self.dropout_spin.setRange(0.0, 0.9)
         self.dropout_spin.setSingleStep(0.05)
+        self.dropout_spin.setDecimals(2)
+        self.dropout_spin.setValue(float(DEFAULT_CONFIG["dropout"]))
+        self.architecture = QLabel("")
+        self.architecture.setWordWrap(True)
+        self.architecture.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        inspect = QPushButton("Count parameters")
+        inspect.clicked.connect(self.on_inspect_clicked)
+        model_form.addRow("Classes", self.classes_spin)
+        model_form.addRow("Base channels", self.base_spin)
+        model_form.addRow("Depth", self.depth_spin)
+        model_form.addRow("Downsample", self.downsample_combo)
+        model_form.addRow("DWT family", self.model_wavelet)
+        model_form.addRow("RAM repeats", self.repeats_spin)
+        model_form.addRow("RAM dropout", self.dropout_spin)
+        model_form.addRow("Tensor ladder", self.architecture)
+        model_form.addRow(inspect)
+        outer.addWidget(model_box)
 
-        form.addRow("Base channels", self.base_spin)
-        form.addRow("Depth (down/up stages)", self.depth_spin)
-        form.addRow("Wavelet", self.wavelet_combo)
-        form.addRow("Convs per block", self.repeats_spin)
-        form.addRow("", self.keep_high_check)
-        form.addRow("Dropout", self.dropout_spin)
-
-        build = QPushButton("Instantiate and count parameters")
-        build.clicked.connect(self.on_build_clicked)
-        self.model_summary = QTextEdit()
-        self.model_summary.setReadOnly(True)
-        self.model_summary.setMinimumHeight(130)
-
-        layout.addWidget(box)
-        layout.addWidget(build)
-        layout.addWidget(self.model_summary)
-        layout.addStretch(1)
-        return page
-
-    def _build_train_tab(self) -> QWidget:
-        page = ScrollPage()
-        layout = page.body
-        box = QGroupBox("Training")
-        form = QFormLayout(box)
-
+        train_box = QGroupBox("Training")
+        train_form = QFormLayout(train_box)
         self.epochs_spin = QSpinBox()
         self.epochs_spin.setRange(1, 500)
         self.epochs_spin.setValue(20)
-
         self.batch_spin = QSpinBox()
         self.batch_spin.setRange(1, 32)
-        self.batch_spin.setValue(2)
-
+        self.batch_spin.setValue(1)
+        self.batch_spin.setToolTip(
+            "Batch 1 at 256 px keeps the memory footprint small; raise it if the "
+            "machine has headroom")
         self.lr_spin = QDoubleSpinBox()
         self.lr_spin.setLocale(c_locale())
         self.lr_spin.setDecimals(6)
         self.lr_spin.setRange(1e-6, 1.0)
-        self.lr_spin.setSingleStep(1e-4)
         self.lr_spin.setValue(1e-3)
-
-        self.size_spin = QSpinBox()
-        self.size_spin.setRange(64, 1024)
-        self.size_spin.setSingleStep(32)
-        self.size_spin.setValue(256)
-
         self.val_spin = QDoubleSpinBox()
         self.val_spin.setLocale(c_locale())
         self.val_spin.setRange(0.0, 0.6)
         self.val_spin.setSingleStep(0.05)
         self.val_spin.setValue(0.2)
-
         self.device_combo = QComboBox()
         self.device_combo.addItems(["auto", "cpu", "cuda", "mps"])
-
-        self.loss_combo = QComboBox()
-        self.loss_combo.addItems(["bce_dice", "dice"])
-
-        for label, widget in (
-            ("Epochs", self.epochs_spin),
-            ("Batch size", self.batch_spin),
-            ("Learning rate", self.lr_spin),
-            ("Image size", self.size_spin),
-            ("Validation fraction", self.val_spin),
-            ("Device", self.device_combo),
-            ("Loss", self.loss_combo),
-        ):
-            form.addRow(label, widget)
-
+        train_form.addRow("Epochs", self.epochs_spin)
+        train_form.addRow("Batch size", self.batch_spin)
+        train_form.addRow("Learning rate", self.lr_spin)
+        train_form.addRow("Image size", self.size_spin)
+        train_form.addRow("Validation fraction", self.val_spin)
+        train_form.addRow("Device", self.device_combo)
         buttons = QHBoxLayout()
         self.start_button = QPushButton("Start training")
-        self.start_button.clicked.connect(self.on_start_training)
+        self.start_button.clicked.connect(self.on_start_clicked)
         self.stop_button = QPushButton("Stop")
         self.stop_button.setEnabled(False)
-        self.stop_button.clicked.connect(self.on_stop_training)
+        self.stop_button.clicked.connect(self.on_stop_clicked)
         buttons.addWidget(self.start_button)
         buttons.addWidget(self.stop_button)
         buttons.addStretch(1)
+        outer.addWidget(train_box)
+        outer.addLayout(buttons)
 
-        self.train_log = QTextEdit()
-        self.train_log.setReadOnly(True)
-        self.train_log.setMinimumHeight(200)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        outer.addWidget(self.progress)
+        self.per_class = QLabel("")
+        self.per_class.setWordWrap(True)
+        outer.addWidget(self.per_class)
 
-        layout.addWidget(box)
-        layout.addLayout(buttons)
-        layout.addWidget(self.train_log, 1)
-        return page
-
-    def _build_predict_tab(self) -> QWidget:
-        page = ScrollPage()
-        layout = page.body
-
-        self.predict_file = FileField("Image", "open", "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)")
-        self.weights_field = FileField("Weights", "open", "PyTorch (*.pt *.pth)")
-        # An exported ONNX model carries the trained network and runs without
-        # torch weights; keep both paths so a shipped .onnx is usable as-is.
-        self.onnx_field = FileField("ONNX model", "open", "ONNX (*.onnx)")
-        self.threshold_spin = QDoubleSpinBox()
-        self.threshold_spin.setLocale(c_locale())
-        self.threshold_spin.setRange(0.0, 1.0)
-        self.threshold_spin.setSingleStep(0.05)
-        self.threshold_spin.setValue(0.5)
-
-        # A fully convolutional net *runs* at any size, but the model was
-        # trained at ``img_size``.  Resizing the input to that size and
-        # upsampling the probability back keeps inference in the regime the
-        # weights were fitted for; without it the numbers silently degrade.
-        self.resize_check = QCheckBox("Predict at the training size")
-        self.resize_check.setChecked(True)
-        self.resize_check.setToolTip(
-            "Resize the slice to the image size used for training, predict, then "
-            "upsample the probability map back to the original resolution.")
-
+        predict_box = QGroupBox("Predict")
+        predict_layout = QVBoxLayout(predict_box)
+        self.image_path = FileField("Image", "open",
+                                    "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)")
+        self.weights_path = FileField("Weights", "open", "PyTorch (*.pt *.pth)")
+        self.onnx_path = FileField("ONNX model", "open", "ONNX (*.onnx)")
         row = QHBoxLayout()
-        run = QPushButton("Segment")
+        run = QPushButton("Segment layers")
         run.clicked.connect(self.on_predict_clicked)
-        save = QPushButton("Save mask...")
-        save.clicked.connect(self.on_save_mask_clicked)
+        save = QPushButton("Save class map...")
+        save.clicked.connect(self.on_save_clicked)
         row.addWidget(run)
         row.addWidget(save)
-        row.addWidget(QLabel("threshold"))
-        row.addWidget(self.threshold_spin)
         row.addStretch(1)
+        self.preview = ImageView(240)
+        self.metrics = QLabel("")
+        self.metrics.setWordWrap(True)
+        predict_layout.addWidget(self.image_path)
+        predict_layout.addWidget(self.weights_path)
+        predict_layout.addWidget(self.onnx_path)
+        predict_layout.addLayout(row)
+        predict_layout.addWidget(self.preview)
+        predict_layout.addWidget(self.metrics)
+        outer.addWidget(predict_box)
 
-        self.predict_progress = QProgressBar()
-        self.predict_progress.setVisible(False)
-        self.predict_status = QLabel("")
-        self.predict_status.setWordWrap(True)
-
-        self.preview = ImageView(300)
-        self.metrics_label = QLabel("")
-        self.metrics_label.setWordWrap(True)
-
-        layout.addWidget(self.predict_file)
-        layout.addWidget(self.weights_field)
-        layout.addWidget(self.onnx_field)
-        layout.addWidget(self.resize_check)
-        layout.addLayout(row)
-        layout.addWidget(self.predict_progress)
-        layout.addWidget(self.predict_status)
-        layout.addWidget(self.preview, 1)
-        layout.addWidget(self.metrics_label)
-        return page
-
-    def _build_export_tab(self) -> QWidget:
-        page = ScrollPage()
-        layout = page.body
-
-        self.onnx_output = FileField("ONNX output", "save", "ONNX (*.onnx)")
+        export_box = QGroupBox("Export")
+        export_layout = QHBoxLayout(export_box)
         export = QPushButton("Export ONNX")
         export.clicked.connect(self.on_export_clicked)
-        self.export_log = QTextEdit()
-        self.export_log.setReadOnly(True)
-        self.export_log.setMinimumHeight(200)
+        export_layout.addWidget(export)
+        export_layout.addStretch(1)
+        outer.addWidget(export_box)
 
-        note = QLabel(
-            "The exported file expects NCHW float32 input in [0, 1] and returns "
-            "logits; apply sigmoid for probabilities. A JSON sidecar records the "
-            "input contract and the export parity check."
-        )
-        note.setWordWrap(True)
+        self.log = QTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMinimumHeight(110)
+        outer.addWidget(self.log)
 
-        layout.addWidget(note)
-        layout.addWidget(self.onnx_output)
-        layout.addWidget(export)
-        layout.addWidget(self.export_log, 1)
+        for spin in (self.classes_spin, self.base_spin, self.depth_spin,
+                     self.size_spin):
+            spin.valueChanged.connect(self._update_architecture)
+        self.downsample_combo.currentTextChanged.connect(self._on_downsample_changed)
+        self.model_wavelet.currentTextChanged.connect(self._update_architecture)
+        self._sync_downsample_controls()
         return page
 
-    # ------------------------------------------------------------- settings
-    def _restore_settings(self) -> None:
-        settings = self.context.settings
-        if settings is None:
-            return
-        self.images_dir.set_path(settings.get("images_dir", "") or "")
-        self.masks_dir.set_path(settings.get("masks_dir", "") or "")
-        self.epochs_spin.setValue(int(settings.get("epochs", 20)))
-        self.size_spin.setValue(int(settings.get("size", 256)))
-        self.batch_spin.setValue(int(settings.get("batch", 2)))
-        self.base_spin.setValue(int(settings.get("base_channels", 64)))
+    # ======================================================= DWT tab ====
+    def _build_dwt_tab(self) -> QWidget:
+        page = ScrollPage()
+        outer = page.body
 
-    def _persist_settings(self) -> None:
-        settings = self.context.settings
-        if settings is None:
-            return
-        settings.update(
-            {
-                "images_dir": self.images_dir.path(),
-                "masks_dir": self.masks_dir.path(),
-                "epochs": self.epochs_spin.value(),
-                "size": self.size_spin.value(),
-                "batch": self.batch_spin.value(),
-                "base_channels": self.base_spin.value(),
-            }
-        )
-        settings._parent.save()  # type: ignore[attr-defined]
+        intro = QLabel(
+            "A 2-D discrete wavelet transform can replace pooling: the wavelet "
+            "functions become digital filters - a low-pass filter l smooths and keeps "
+            "the main structure (LL), a high-pass filter h keeps the fast variations, "
+            "giving horizontal (LH), vertical (HL) and diagonal (HH) details. The "
+            "network uses MaxPool2d by default; set *Downsample* to 'dwt' in the "
+            "Layers tab to put this LL sub-band inside the encoder instead. The "
+            "*Analysis* group below applies the outline's stages as fixed wavelet "
+            "rules (no weights, no training).")
+        intro.setWordWrap(True)
+        outer.addWidget(intro)
 
-    # ------------------------------------------------------------ model cfg
-    def model_config(self) -> Dict[str, Any]:
+        controls = QGroupBox("Decomposition")
+        form = QFormLayout(controls)
+        self.dwt_image = FileField("Image", "open",
+                                   "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)")
+        self.dwt_wavelet = QComboBox()
+        self.dwt_wavelet.addItems(list(wavelib.ALL_WAVELETS))
+        self.dwt_level = QSpinBox()
+        self.dwt_level.setRange(1, 3)
+        self.dwt_level.setValue(1)
+        run = QPushButton("Decompose step by step")
+        run.clicked.connect(self.on_decompose_clicked)
+        form.addRow(self.dwt_image)
+        form.addRow("Wavelet family", self.dwt_wavelet)
+        form.addRow("Levels (LL again)", self.dwt_level)
+        form.addRow(run)
+        outer.addWidget(controls)
+
+        grid = QGridLayout()
+        self.band_views = {}
+        for position, band in enumerate(("LL", "LH", "HL", "HH")):
+            box = QGroupBox(band)
+            box_layout = QVBoxLayout(box)
+            caption = QLabel(wavelib.describe_band(band))
+            caption.setWordWrap(True)
+            view = ImageView(140)
+            box_layout.addWidget(view)
+            box_layout.addWidget(caption)
+            grid.addWidget(box, position // 2, position % 2)
+            self.band_views[band] = view
+        outer.addLayout(grid)
+
+        self.dwt_text = QTextEdit()
+        self.dwt_text.setReadOnly(True)
+        self.dwt_text.setMinimumHeight(110)
+        outer.addWidget(self.dwt_text)
+
+        # ------------------------------------------------ training-free maps
+        analysis_box = QGroupBox("Analysis (training-free)")
+        analysis_form = QFormLayout(analysis_box)
+        self.gate_k = QDoubleSpinBox()
+        self.gate_k.setLocale(c_locale())
+        self.gate_k.setRange(0.0, 10.0)
+        self.gate_k.setSingleStep(0.5)
+        self.gate_k.setDecimals(2)
+        self.gate_k.setValue(3.0)
+        self.gate_k.setToolTip(
+            "Gate strength: T = k * sigma * sqrt(2 ln n), sigma from the median "
+            "absolute deviation of each band")
+        self.gate_mode = QComboBox()
+        self.gate_mode.addItems(["soft", "hard", "none"])
+        analyse = QPushButton("Analyse (no trained weights)")
+        analyse.clicked.connect(self.on_analyse_clicked)
+        analysis_form.addRow("Gate strength k", self.gate_k)
+        analysis_form.addRow("Threshold", self.gate_mode)
+        analysis_form.addRow(analyse)
+        outer.addWidget(analysis_box)
+
+        maps = QGridLayout()
+        self.map_views = {}
+        for position, (name, caption) in enumerate((
+                ("reconstruction", "denoised reconstruction (inverse DWT)"),
+                ("detail", "detail energy, finest level (normalised)"),
+                ("gate", "gate |c| / (|c| + T): bright = kept"))):
+            box = QGroupBox(name.capitalize())
+            box_layout = QVBoxLayout(box)
+            caption_label = QLabel(caption)
+            caption_label.setWordWrap(True)
+            view = ImageView(150)
+            box_layout.addWidget(view)
+            box_layout.addWidget(caption_label)
+            maps.addWidget(box, position // 2, position % 2)
+            self.map_views[name] = view
+        outer.addLayout(maps)
+
+        self.analysis_text = QTextEdit()
+        self.analysis_text.setReadOnly(True)
+        self.analysis_text.setMinimumHeight(120)
+        outer.addWidget(self.analysis_text)
+
+        save_row = QHBoxLayout()
+        save_recon = QPushButton("Save reconstruction...")
+        save_recon.clicked.connect(self.on_save_recon_clicked)
+        save_csv = QPushButton("Save report (.csv)...")
+        save_csv.clicked.connect(self.on_save_analysis_csv_clicked)
+        save_row.addWidget(save_recon)
+        save_row.addWidget(save_csv)
+        save_row.addStretch(1)
+        outer.addLayout(save_row)
+        return page
+
+    # =========================================================== helpers
+    def _append_log(self, message: str) -> None:
+        self.log.append(message)
+        self.context.logger.info(message)
+
+    def _echo(self, message: str) -> None:
+        self.sig_log.emit(message)
+
+    def num_classes(self) -> int:
+        masks = self.masks_dir.path()
+        if masks:
+            import json
+
+            classes_file = Path(masks).parent / "classes.json"
+            if classes_file.is_file():
+                try:
+                    return max(2, int(json.loads(classes_file.read_text())["num_classes"]))
+                except Exception:
+                    pass
+        return int(self.classes_spin.value())
+
+    def class_names(self) -> list:
+        masks = self.masks_dir.path()
+        if masks:
+            import json
+
+            classes_file = Path(masks).parent / "classes.json"
+            if classes_file.is_file():
+                try:
+                    names = json.loads(classes_file.read_text()).get("names") or []
+                    if names:
+                        return names
+                except Exception:
+                    pass
+        return list(self.addon.manifest.config.get("classes", []))
+
+    def model_config(self) -> dict:
         return {
             "in_channels": 1,
-            "out_channels": 1,
+            "out_channels": self.num_classes(),
+            "num_classes": self.num_classes(),
             "base_channels": self.base_spin.value(),
             "depth": self.depth_spin.value(),
-            "wavelet": self.wavelet_combo.currentText(),
-            "keep_high": self.keep_high_check.isChecked(),
-            "dropout": self.dropout_spin.value(),
+            "channel_multiplier": int(DEFAULT_CONFIG["channel_multiplier"]),
             "repeats": self.repeats_spin.value(),
+            "dropout": float(self.dropout_spin.value()),
+            "upsample": str(DEFAULT_CONFIG["upsample"]),
+            "downsample": self.downsample_combo.currentText(),
+            "wavelet": self.model_wavelet.currentText(),
         }
 
-    # ---------------------------------------------------------------- slots
+    def _plan_lines(self) -> list:
+        plan = channel_plan(self.model_config(), self.size_spin.value())
+        depth = plan["input"]
+        lines = [f"input [{depth[0]}, {depth[1]}x{depth[2]}]"]
+        padded = plan["padded_input"]
+        if padded[1] != depth[1] or padded[2] != depth[2]:
+            lines.append(f"padded to [{padded[0]}, {padded[1]}x{padded[2]}] "
+                         f"for depth {self.depth_spin.value()}")
+        if plan["downsample"] == "dwt":
+            lines.append(f"downsampling: dwt (LL sub-band, {plan['wavelet']})")
+        else:
+            lines.append("downsampling: maxpool (spec)")
+        for stage in plan["encoder"]:
+            height, width = stage["size"]
+            lines.append(f"enc {stage['stage']}: {stage['channels']} ch @ {height}x{width}")
+        bottleneck = plan["bottleneck"]
+        bottom_h, bottom_w = bottleneck["size"]
+        lines.append(f"bottleneck: {bottleneck['channels']} ch @ {bottom_h}x{bottom_w}")
+        for stage in plan["decoder"]:
+            height, width = stage["size"]
+            lines.append(
+                f"dec {stage['stage']}: {stage['in_channels']} -> up {stage['upsampled_channels']}"
+                f" + RAM skip {stage['skip_channels']} = {stage['out_channels']} ch"
+                f" @ {height}x{width}")
+        head = plan["head"]
+        lines.append(f"head 1x1: {head['in_channels']} -> {head['out_channels']} classes")
+        return lines
+
+    def _sync_downsample_controls(self) -> None:
+        self.model_wavelet.setEnabled(
+            self.downsample_combo.currentText() == "dwt")
+
+    def _on_downsample_changed(self, _text: str = "") -> None:
+        self._sync_downsample_controls()
+        self._update_architecture()
+
+    def _update_architecture(self) -> None:
+        try:
+            self.architecture.setText("\n".join(self._plan_lines()))
+        except Exception as exc:
+            self.architecture.setText(f"architecture: {exc}")
+
+    # ============================================================== data
     def on_scan_clicked(self) -> None:
-        images = self.images_dir.path()
-        masks = self.masks_dir.path()
-        if not images:
-            self.sig_log.emit("Pick an image folder first")
+        images, masks = self.images_dir.path(), self.masks_dir.path()
+        if not images or not masks:
+            self._echo("set both folders first")
             return
         try:
-            self._cases = data_io.discover_cases(images, masks or None)
+            cases = data_io.discover_cases(images, masks)
         except Exception as exc:
-            self.sig_log.emit(f"scan failed: {exc}")
+            self._echo(f"scan failed: {exc}")
             return
-        self.case_list.clear()
-        labelled = sum(1 for case in self._cases if case.labelled)
-        self.dataset_label.setText(
-            f"{len(self._cases)} images, {labelled} with masks "
-            f"({Path(images).name})"
-        )
-        for case in self._cases[:400]:
-            suffix = "" if case.labelled else "   (no mask)"
-            self.case_list.addItem(f"{case.name}{suffix}")
-        self._persist_settings()
+        names = self.class_names()
+        self.dataset_info.setText(
+            f"{len(cases)} slices | {self.num_classes()} classes "
+            f"({', '.join(names[:4])}{'…' if len(names) > 4 else ''})")
+        self._echo(f"dataset: {len(cases)} pairs, {self.num_classes()} classes")
 
-    def on_build_clicked(self) -> None:
+    def on_inspect_clicked(self) -> None:
         try:
             model = build_model(self.model_config())
-            params = count_parameters(model) / 1e6
-            summary = (
-                f"class      : {type(model).__name__}\n"
-                f"parameters : {params:.2f} M\n"
-                f"channels   : {[self.base_spin.value() * 2 ** i for i in range(self.depth_spin.value() + 1)]}\n"
-                f"wavelet    : {self.wavelet_combo.currentText()} (fixed filters, 0 params)\n"
-                f"keep_high  : {self.keep_high_check.isChecked()}\n"
-                f"downsample : {2 ** self.depth_spin.value()}x\n"
-                f"paper      : 34.6 M / 1.1 GFLOPs (WRANet, Zhao et al. 2023)"
-            )
-            self.model_summary.setPlainText(summary)
+            downsample = self.downsample_combo.currentText()
+            if downsample == "dwt":
+                downsample = f"dwt/{self.model_wavelet.currentText()}"
+            self._echo(f"{type(model).__name__}: {count_parameters(model)/1e6:.2f} M "
+                       f"parameters, {self.num_classes()} classes, "
+                       f"downsample {downsample}, "
+                       f"RAM repeats {self.repeats_spin.value()}, "
+                       f"dropout {self.dropout_spin.value():.2f}")
+            for line in self._plan_lines():
+                self._echo("  " + line)
         except Exception as exc:
-            self.model_summary.setPlainText(f"error: {exc}")
+            self._echo(f"model error: {exc}")
 
-    def on_start_training(self) -> None:
-        from amis.ml.trainer import Trainer, TrainingConfig
-
+    # ========================================================== training
+    def on_start_clicked(self) -> None:
+        if self._trainer is not None and self._trainer.running:
+            self._echo("training already running")
+            return
         if not self.images_dir.path() or not self.masks_dir.path():
-            self.sig_log.emit("Set image and mask folders first")
+            self._echo("set both folders first")
             return
         config = TrainingConfig(
             epochs=self.epochs_spin.value(),
@@ -415,17 +549,17 @@ class WranetPanel(QWidget):
             lr=self.lr_spin.value(),
             size=self.size_spin.value(),
             val_fraction=self.val_spin.value(),
-            loss=self.loss_combo.currentText(),
-            device="" if self.device_combo.currentText() == "auto" else self.device_combo.currentText(),
+            device="" if self.device_combo.currentText() == "auto"
+            else self.device_combo.currentText(),
+            num_classes=self.num_classes(),
         )
-        out_dir = Path(self.context.data_dir) / "wranet"
-        self.trainer = Trainer(
+        self._trainer = Trainer(
             build_model=build_model,
             model_config=self.model_config(),
             config=config,
             image_dir=self.images_dir.path(),
             mask_dir=self.masks_dir.path(),
-            out_dir=out_dir,
+            out_dir=Path(self.context.data_dir),
             on_log=self.sig_log.emit,
             on_epoch=lambda report: self.sig_epoch.emit(report.to_dict()),
             on_done=self.sig_done.emit,
@@ -433,199 +567,276 @@ class WranetPanel(QWidget):
         )
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
-        self.sig_log.emit(f"output directory: {out_dir}")
-        self.trainer.start()
-        self._persist_settings()
+        self.progress.setValue(0)
+        self._echo(f"output: {self.context.data_dir}")
+        self._trainer.start()
 
-    def on_stop_training(self) -> None:
-        if self.trainer is not None:
-            self.trainer.stop()
-            self.sig_log.emit("stop requested")
+    def on_stop_clicked(self) -> None:
+        if self._trainer is not None:
+            self._trainer.stop()
+            self._echo("stop requested")
 
+    def _on_epoch(self, report: dict) -> None:
+        total = max(1, int(report.get("total", 1)))
+        self.progress.setValue(int(100 * report.get("epoch", 0) / total))
+        per_class = report.get("val_dice_classes") or {}
+        names = self.class_names()
+        parts = []
+        for key, value in sorted(per_class.items()):
+            if not key.startswith("class_"):
+                continue
+            try:
+                index = int(key.split("_")[1])
+            except ValueError:
+                continue
+            label = names[index] if 0 <= index < len(names) else key
+            if value > 0:
+                parts.append(f"{label} {value:.3f}")
+        if parts:
+            self.per_class.setText("  ".join(parts))
+
+    def _on_done(self, payload: dict) -> None:
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.progress.setValue(100)
+        self._echo(f"finished: best mean class Dice {payload.get('best_dice', 0):.4f} "
+                   f"in {payload.get('epochs_done', 0)} epochs")
+
+    def _on_error(self, message: str) -> None:
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self._echo(f"ERROR {message}")
+
+    # =========================================================== predict
     def on_predict_clicked(self) -> None:
-        import torch  # noqa: F401 - fail early with a clear message
-
-        image_path = self.predict_file.path()
-        if not image_path:
+        path = self.image_path.path()
+        if not path:
+            self._echo("pick an image first")
             return
-
-        self.predict_progress.setVisible(True)
-        self.predict_progress.setRange(0, 0)      # indeterminate: one image
-        self.predict_status.setText("segmenting…")
-        self.tabs.setEnabled(False)
+        self.progress.setRange(0, 0)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
         try:
-            weights = self.weights_field.path()
-            if not weights:
-                candidate = Path(self.context.data_dir) / "wranet" / "best.pt"
-                if candidate.is_file():
-                    weights = str(candidate)
-                    self.weights_field.set_path(weights)
-                    self.sig_log.emit(f"using {weights}")
-            from amis.ml.backend import make_segmenter
+            import torch
+            from amis.ml.backend import OnnxSegmenter, make_segmenter
 
-            onnx_path = self.onnx_field.path()
-            if not onnx_path:
+            onnx = self.onnx_path.path()
+            weights = self.weights_path.path()
+            if not onnx:
                 bundled = sorted((Path(self.context.addon_dir) / "models").glob("*.onnx"))
                 if bundled and not weights:
-                    onnx_path = str(bundled[0])
-                    self.onnx_field.set_path(onnx_path)
-                    self.sig_log.emit(f"using bundled model {onnx_path}")
+                    onnx = str(bundled[0])
+                    self.onnx_path.set_path(onnx)
 
-            if onnx_path:
-                segmenter = make_segmenter(
-                    onnx_model=onnx_path, input_size=self.size_spin.value())
-                self.sig_log.emit(f"inference backend: ONNX ({Path(onnx_path).name})")
+            image = data_io.load_gray(path)
+            size = self.size_spin.value()
+
+            if onnx:
+                session = OnnxSegmenter(onnx)
+                # An exported model declares the size it was traced at; the panel
+                # cannot override it. Feeding the spin value gave
+                # "Got 192 Expected 160" from ONNX Runtime.
+                model_size = session.recommended_size()
+                if model_size and model_size != size:
+                    self._echo(f"ONNX model is fixed at {model_size} px; "
+                               f"using it instead of {size} (the panel is updated)")
+                    self.size_spin.setValue(model_size)
+                    size = model_size
+                working = data_io.load_gray(path, size)
+                logits = session.session.run(
+                    None, {session.input_name: working[None, None].astype(np.float32)})[0]
+                classes = np.argmax(logits[0], axis=0).astype(np.int64)
+                backend = f"ONNX Runtime [{size} px]"
             else:
-                segmenter = make_segmenter(
-                    build_model=build_model,
-                    config=self.model_config(),
-                    weights=weights or None,
-                    input_size=self.size_spin.value(),
-                )
-            # An exported ONNX model may bake in its input size; that size wins
-            # over the "Image size" spin, otherwise ONNX Runtime rejects the
-            # tensor with "Got: 256 Expected: 192".
-            model_size = 0
-            if hasattr(segmenter, "recommended_size"):
-                model_size = segmenter.recommended_size() or 0
+                if not weights:
+                    self._echo("no weights selected and no bundled ONNX model: "
+                               "the untrained network will output noise")
+                working = data_io.load_gray(path, size)
+                segmenter = make_segmenter(build_model=build_model,
+                                           config=self.model_config(),
+                                           weights=weights or None)
+                with torch.no_grad():
+                    logits = segmenter.model(torch.from_numpy(working)[None, None])
+                    classes = torch.argmax(logits, dim=1)[0].cpu().numpy()
+                backend = f"PyTorch [{size} px]"
 
-            image = data_io.load_gray(image_path)
-            native = image.shape
-            training_size = int(self.size_spin.value())
-            target = model_size or (training_size if self.resize_check.isChecked() else 0)
-            if model_size and training_size and model_size != training_size:
-                self.sig_log.emit(
-                    f"note: this model expects {model_size} px, ignoring Image size "
-                    f"{training_size}"
-                )
-            working = data_io.load_gray(image_path, target) if target > 0 else image
+            if classes.shape != image.shape:
+                from PIL import Image
 
-            probability = segmenter.predict(working)
-            if working.shape != native:
-                probability = self._to_shape(probability, native)
+                classes = np.asarray(
+                    Image.fromarray(classes.astype(np.uint8)).resize(
+                        (image.shape[1], image.shape[0]), Image.NEAREST), dtype=np.int64)
 
-            self._last_prediction = probability
-            self.preview.set_image(probability)
+            self._prediction = classes
+            self.preview.set_image(PALETTE[np.clip(classes, 0, len(PALETTE) - 1)])
 
-            mask_path = self._sibling_mask(image_path)
-            if mask_path is not None:
-                truth = data_io.load_mask(mask_path, native)
-                values = metric_lib.all_metrics(self._last_prediction, truth)
-                self.metrics_label.setText(
-                    f"dice {values['dice']:.4f}  iou {values['iou']:.4f}  "
-                    f"precision {values['precision']:.4f}  "
-                    f"sensitivity {values['sensitivity']:.4f}"
-                )
-            else:
-                self.metrics_label.setText("no ground-truth mask found next to the image")
+            truth_file = None
+            masks = self.masks_dir.path()
+            if masks:
+                for suffix in (".png", ".tif", ".tiff"):
+                    candidate = Path(masks) / f"{Path(path).stem}{suffix}"
+                    if candidate.is_file():
+                        truth_file = candidate
+                        break
+            if truth_file is None:
+                self.metrics.setText(f"{backend} | {image.shape[1]}x{image.shape[0]} px | "
+                                     f"no reference mask for this image")
+                return
+            truth = data_io.load_classes(truth_file, image.shape)
+            scores = metric_lib.dice_per_class(classes, truth, self.num_classes())
+            names = self.class_names()
+            detail = []
+            for key, value in sorted(scores.items()):
+                if not key.startswith("class_"):
+                    continue
+                index = int(key.split("_")[1])
+                label = names[index] if 0 <= index < len(names) else key
+                detail.append(f"{label} {value:.3f}")
+            self.metrics.setText(
+                f"{backend} | mean class Dice {scores['mean']:.4f} over "
+                f"{int(scores['classes_present'])} classes | " + "  ".join(detail))
         except Exception as exc:
-            self.predict_status.setText(f"failed: {exc}")
-            self.sig_log.emit(f"prediction failed: {exc}")
+            self._echo(f"prediction failed: {exc}")
         finally:
             QApplication.restoreOverrideCursor()
-            self.tabs.setEnabled(True)
-            self.predict_progress.setVisible(False)
-            self.predict_progress.setRange(0, 100)
-            if not self.predict_status.text().startswith("failed"):
-                self.predict_status.setText(
-                    f"{native[1]}x{native[0]} px | {self._backend_label(segmenter)}")
+            self.progress.setRange(0, 100)
 
-    @staticmethod
-    def _backend_label(segmenter) -> str:
-        name = type(segmenter).__name__
-        if name == "OnnxSegmenter":
-            return "ONNX Runtime"
-        return "PyTorch"
-
-    def on_save_mask_clicked(self) -> None:
-        if self._last_prediction is None:
+    def on_save_clicked(self) -> None:
+        if self._prediction is None:
+            self._echo("nothing to save yet")
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save mask", str(Path.home() / "mask.png"), "PNG (*.png)"
-        )
+            self.context.qt_parent, "Save class map",
+            str(Path.home() / "wranet_layers.png"), "PNG (*.png)")
         if path:
-            data_io.save_mask(path, self._last_prediction >= self.threshold_spin.value())
+            from PIL import Image
 
+            Image.fromarray(self._prediction.astype(np.uint8)).save(path)
+            self._echo(f"saved class-index map to {path}")
+
+    # ============================================================ export
     def on_export_clicked(self) -> None:
-        output = self.onnx_output.path()
-        if not output:
-            output = str(Path(self.context.data_dir) / "wranet" / "wranet.onnx")
-            self.onnx_output.set_path(output)
-        weights = self.weights_field.path()
-        if not weights:
-            candidate = Path(self.context.data_dir) / "wranet" / "best.pt"
-            if candidate.is_file():
-                weights = str(candidate)
-        try:
-            from amis.ml.onnx_export import export_onnx
+        from amis.ml.onnx_export import export_onnx
 
+        output = str(Path(self.context.data_dir) / "wranet.onnx")
+        try:
             metadata = export_onnx(
                 build_model=build_model,
                 model_config=self.model_config(),
                 output_path=output,
                 input_size=self.size_spin.value(),
-                weights=weights or None,
+                weights=self.weights_path.path() or None,
             )
-            self.export_log.setPlainText(
-                "\n".join(f"{key:18s}: {value}" for key, value in metadata.items())
-            )
+            self._echo(f"exported {output} with "
+                       f"{metadata.get('model_config', {}).get('num_classes')} channels "
+                       f"(verified={metadata.get('verified')}). Apply softmax, then argmax.")
         except Exception as exc:
-            self.export_log.setPlainText(f"export failed: {exc}")
+            self._echo(f"export failed: {exc}")
 
-    # ------------------------------------------------------------ callbacks
-    def _append_log(self, message: str) -> None:
-        self.train_log.append(message)
-        self.export_log.append(message)
+    # =============================================================== DWT
+    def on_decompose_clicked(self) -> None:
+        path = self.dwt_image.path()
+        if not path:
+            self._echo("pick an image for the decomposition")
+            return
+        try:
+            image = data_io.load_gray(path)
+            wavelet = self.dwt_wavelet.currentText()
+            levels = int(self.dwt_level.value())
 
-    def _on_epoch(self, report: dict) -> None:
-        # The trainer already emits a one-line summary through _append_log;
-        # keep the hook so future versions can drive a progress bar.
-        pass
+            steps = wavelib.dwt2_steps(image, wavelet)
+            self._dwt_steps = steps
+            stats = wavelib.sub_band_stats(steps)
+            total_energy = sum(item["energy"] for item in stats.values()) or 1.0
 
-    def _on_done(self, payload: dict) -> None:
-        self.sig_log.emit(
-            f"best dice {payload.get('best_dice', 0):.4f} "
-            f"({payload.get('epochs_done', 0)} epochs, "
-            f"{payload.get('seconds', 0):.0f}s)"
-        )
-        self.start_button.setEnabled(True)
-        self.stop_button.setEnabled(False)
+            for band, view in self.band_views.items():
+                band_image = steps[band]
+                # each band gets its own scale, otherwise LL dwarfs the details
+                peak = float(np.max(np.abs(band_image))) or 1.0
+                view.set_image(np.abs(band_image) / peak)
 
-    def _on_error(self, message: str) -> None:
-        self.sig_log.emit(f"ERROR {message}")
-        self.start_button.setEnabled(True)
-        self.stop_button.setEnabled(False)
+            lines = [f"image {image.shape[1]}x{image.shape[0]} -> "
+                     f"{steps['LL'].shape[1]}x{steps['LL'].shape[0]}", "",
+                     wavelib.describe_wavelet(wavelet), ""]
+            for band in ("LL", "LH", "HL", "HH"):
+                share = 100.0 * stats[band]["energy"] / total_energy
+                lines.append(f"{band}: {wavelib.describe_band(band)}")
+                lines.append(f"     {share:5.1f}% of the detail energy, "
+                             f"max |coefficient| {stats[band]['max_abs']:.3f}")
+            if levels > 1:
+                chain = wavelib.cascade(image, wavelet, levels)
+                shapes = " -> ".join(str(item[1]["LL"].shape[::-1]) for item in chain)
+                lines += ["", f"cascade: LL decomposed again {levels} time(s): {shapes}"]
+            lines += ["", "Display note: each sub-band is shown on its own scale "
+                          "(normalised by its maximum) so the details are visible; "
+                          "the percentages above are the real energies."]
+            self.dwt_text.setPlainText("\n".join(lines))
+            self._echo(f"DWT: {wavelet}, level {levels}, image {image.shape}")
+        except Exception as exc:
+            self._echo(f"decomposition failed: {exc}")
 
-    # --------------------------------------------------------------- helpers
-    @staticmethod
-    def _to_shape(probability, shape):
-        """Bilinear resize of a float probability map (never nearest)."""
-        from PIL import Image
+    # ============================================================ analysis
+    def on_analyse_clicked(self) -> None:
+        path = self.dwt_image.path()
+        if not path:
+            self._echo("pick an image for the analysis")
+            return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
+        try:
+            image = data_io.load_gray(path)
+            result = analysis_lib.run_analysis(
+                image,
+                wavelet=self.dwt_wavelet.currentText(),
+                levels=int(self.dwt_level.value()),
+                k=float(self.gate_k.value()),
+                mode=self.gate_mode.currentText(),
+            )
+            self._analysis = result
+            self.map_views["reconstruction"].set_image(result.recon)
+            self.map_views["detail"].set_image(result.detail)
+            self.map_views["gate"].set_image(result.gate)
+            self.analysis_text.setPlainText(result.report)
+            self._echo(f"analysis (no weights): {result.wavelet}, "
+                       f"{result.levels} level(s), k {result.k:.2f}, "
+                       f"RMSE {result.rmse:.6f}, PSNR {result.psnr:.2f} dB")
+        except Exception as exc:
+            self._echo(f"analysis failed: {exc}")
+        finally:
+            QApplication.restoreOverrideCursor()
 
-        scaled = np.clip(np.asarray(probability, dtype=np.float32), 0.0, 1.0) * 65535.0
-        image = Image.fromarray(scaled.astype(np.uint16))
-        image = image.resize((shape[1], shape[0]), Image.BILINEAR)
-        return np.asarray(image, dtype=np.float32) / 65535.0
+    def on_save_recon_clicked(self) -> None:
+        if self._analysis is None:
+            self._echo("run the analysis first")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self.context.qt_parent, "Save reconstruction",
+            str(Path.home() / "wranet_reconstruction.png"), "PNG (*.png)")
+        if path:
+            from PIL import Image
 
-    def _sibling_mask(self, image_path: str) -> Optional[Path]:
-        """Ground truth: the Masks folder first, then a sibling with another suffix."""
-        image = Path(image_path)
-        masks_dir = self.masks_dir.path()
-        if masks_dir:
-            for suffix in (".png", ".tif", ".tiff", ".bmp"):
-                candidate = Path(masks_dir) / f"{image.stem}{suffix}"
-                if candidate.is_file():
-                    return candidate
-        for suffix in (".png", ".tif", ".tiff", ".bmp"):
-            candidate = image.with_suffix(suffix)
-            if candidate.is_file() and candidate != image:
-                return candidate
-        return None
+            data = (np.clip(self._analysis.recon, 0.0, 1.0) * 255).astype(np.uint8)
+            Image.fromarray(data).save(path)
+            self._echo(f"saved reconstruction to {path}")
+
+    def on_save_analysis_csv_clicked(self) -> None:
+        if self._analysis is None:
+            self._echo("run the analysis first")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self.context.qt_parent, "Save analysis report",
+            str(Path.home() / "wranet_analysis.csv"), "CSV (*.csv)")
+        if not path:
+            return
+        import csv
+
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(analysis_lib.AnalysisResult.csv_header())
+            writer.writerows(self._analysis.csv_rows())
+        self._echo(f"saved analysis report to {path}")
 
 
-# --------------------------------------------------------------------- addon
 class WranetAddon(AddonBase):
     """Addon entry point."""
 
@@ -633,7 +844,8 @@ class WranetAddon(AddonBase):
         self.ui = None
 
     def build_panel(self) -> QWidget:
-        return WranetPanel(self)
+        self.panel_widget = WranetPanel(self)
+        return self.panel_widget
 
     def on_activated(self) -> None:
         self.context.logger.debug("WRANet panel activated")
