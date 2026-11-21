@@ -87,7 +87,7 @@
     {
       "id": "wranet",
       "name": "WRANet",
-      "description": "WRANet family: 14-class retinal segmentation with residual attention. 1.0-1.1 use wavelet downsampling and ship a trained demo (1.1.4, Dice 0.638); 2.0.0 adds a pooling encoder, channel + spatial RAM, a DWT-LL ablation and a training-free wavelet analysis.",
+      "description": "WRANet family: 14-class retinal segmentation with residual attention. 1.0-1.1 use wavelet downsampling (1.1.4 is the trained 14-class demo, Dice 0.638); 2.0.0 adds a pooling encoder, channel + spatial RAM, a DWT-LL ablation and a training-free wavelet analysis.",
       "author": "AMIS core team",
       "license": "GPL-3.0-or-later",
       "category": "segmentation",
